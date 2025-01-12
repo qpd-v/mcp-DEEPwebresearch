@@ -1,0 +1,85 @@
+# MCP-WebResearch Improvements Plan
+
+## Phase 1: High Priority Improvements
+
+### 1. Intelligent Search Queue System [IN PROGRESS]
+Implementation Steps:
+1. Create SearchQueue class to manage search operations
+   - Add queue data structure for pending searches
+   - Implement rate limiting with exponential backoff
+   - Add progress tracking and status reporting
+   - Handle error recovery and retries
+
+2. Add new tool endpoints:
+   - batch_search: Queue multiple searches
+   - get_queue_status: Check search queue progress
+   - cancel_search: Cancel pending searches
+
+3. Enhance search results aggregation:
+   - Implement result deduplication
+   - Add result sorting options
+   - Improve error handling and recovery
+
+4. Add queue persistence:
+   - Save queue state between sessions
+   - Handle interrupted searches
+   - Implement queue recovery
+
+Testing Criteria:
+- Queue should handle at least 50 searches without triggering anti-bot measures
+- Rate limiting should adapt to Google's response patterns
+- Progress updates should be accurate and timely
+- Results should be properly aggregated and deduplicated
+
+### 2. Enhanced Content Extraction & Relevance Scoring [IN PROGRESS]
+Implementation Steps:
+1. Improve content relevance scoring:
+   - Implement TF-IDF scoring
+   - Add keyword proximity analysis
+   - Add content section weighting
+   - Implement readability scoring
+
+2. Enhance content extraction:
+   - Improve HTML structure parsing
+   - Add support for common content patterns
+   - Implement better content cleaning
+   - Add structured data extraction
+
+3. Add content summarization:
+   - Implement extractive summarization
+   - Add key points extraction
+   - Generate section summaries
+   - Preserve important metadata
+
+4. Improve markdown conversion:
+   - Enhance formatting preservation
+   - Better handle tables and lists
+   - Improve code block handling
+   - Better preserve document structure
+
+Testing Criteria:
+- Content relevance scores should align with human judgment
+- Extracted content should be clean and well-formatted
+- Structured data should be accurately identified
+- Summaries should capture key information
+- Markdown output should be consistently formatted
+
+## Implementation Notes:
+- Each feature will be implemented incrementally
+- Testing will be done after each major component
+- Code reviews required before merging
+- Performance benchmarks will be maintained
+
+## Status Tracking:
+[ ] Feature 1 Started
+[ ] Feature 1 Tested
+[ ] Feature 1 Complete
+[ ] Feature 2 Started
+[ ] Feature 2 Tested
+[ ] Feature 2 Complete
+
+## Dependencies to Add:
+- tf-idf-search (for relevance scoring)
+- readability (for content analysis)
+- html-to-md (for improved markdown conversion)
+- rate-limiter-flexible (for queue management)

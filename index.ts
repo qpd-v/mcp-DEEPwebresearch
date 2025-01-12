@@ -25,6 +25,11 @@ import type { Node } from "turndown";
 import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
+import { ParallelSearch } from './src/parallel-search.js';
+import { ParallelSearchResult } from './src/types.js';
+
+// Initialize parallel search instance
+const parallelSearch = new ParallelSearch();
 
 // Initialize temp directory for screenshots
 const SCREENSHOTS_DIR = fs.mkdtempSync(path.join(os.tmpdir(), 'mcp-screenshots-'));
@@ -139,6 +144,31 @@ const TOOLS: Tool[] = [
                 query: { type: "string", description: "Search query" },
             },
             required: ["query"],
+        },
+    },
+    {
+        name: "parallel_search",
+        description: "Perform multiple Google searches in parallel",
+        inputSchema: {
+            type: "object",
+            properties: {
+                queries: {
+                    type: "array",
+                    items: { type: "string" },
+                    description: "Array of search queries to execute in parallel"
+                },
+                maxParallel: {
+                    type: "number",
+                    description: "Maximum number of parallel searches (default: 10, max: 10)",
+                    minimum: 1,
+                    maximum: 10
+                },
+                outputDir: {
+                    type: "string",
+                    description: "Directory to save search results (default: search-results)"
+                }
+            },
+            required: ["queries"]
         },
     },
     {
@@ -1106,6 +1136,93 @@ server.setRequestHandler(CallToolRequestSchema, async (request): Promise<ToolRes
                     content: [{
                         type: "text" as const,
                         text: `Failed to take screenshot: ${(error as Error).message}`
+                    }],
+                    isError: true
+                };
+            }
+        }
+
+        // Handle parallel search requests
+        case "parallel_search": {
+            const { queries, maxParallel, outputDir } = request.params.arguments as {
+                queries: string[];
+                maxParallel?: number;
+                outputDir?: string;
+            };
+
+            if (!queries || !Array.isArray(queries)) {
+                return {
+                    content: [{
+                        type: "text",
+                        text: "Invalid queries parameter. Must provide an array of search queries."
+                    }],
+                    isError: true
+                };
+            }
+
+            try {
+                // Ensure we're using the current working directory
+                // Use OS temp directory for output
+                const outputDirPath = path.join(os.tmpdir(), outputDir || 'search-results');
+                
+                // Create output directory if it doesn't exist
+                if (!fs.existsSync(outputDirPath)) {
+                    fs.mkdirSync(outputDirPath, { recursive: true });
+                }
+
+                const options = {
+                    maxParallel: Math.min(maxParallel || 10, 10),
+                    outputDir: outputDirPath
+                };
+
+                // Execute parallel searches
+                const results = await parallelSearch.parallelSearch(queries);
+                
+                // Cleanup browser instances
+                await parallelSearch.cleanup();
+
+                // Format results for response
+                const successfulSearches = results.filter((r: ParallelSearchResult) => !r.error);
+                const failedSearches = results.filter((r: ParallelSearchResult) => r.error);
+
+                // Add successful results to the current session
+                successfulSearches.forEach((result: ParallelSearchResult) => {
+                    result.results.forEach(searchResult => {
+                        addResult({
+                            url: searchResult.url,
+                            title: searchResult.title,
+                            content: searchResult.snippet,
+                            timestamp: new Date().toISOString(),
+                        });
+                    });
+                });
+
+                return {
+                    content: [{
+                        type: "text",
+                        text: JSON.stringify({
+                            summary: {
+                                totalQueries: queries.length,
+                                successful: successfulSearches.length,
+                                failed: failedSearches.length,
+                                outputDirectory: options.outputDir
+                            },
+                            results: results.map((r: ParallelSearchResult) => ({
+                                searchId: r.searchId,
+                                query: r.query,
+                                status: r.error ? 'failed' : 'success',
+                                resultCount: r.results.length,
+                                error: r.error,
+                                results: r.results
+                            }))
+                        }, null, 2)
+                    }]
+                };
+            } catch (error) {
+                return {
+                    content: [{
+                        type: "text",
+                        text: `Failed to execute parallel search: ${(error as Error).message}`
                     }],
                     isError: true
                 };
