@@ -166,6 +166,10 @@ const TOOLS: Tool[] = [
                 outputDir: {
                     type: "string",
                     description: "Directory to save search results (default: search-results)"
+                },
+                includeTimings: {
+                    type: "boolean",
+                    description: "Include execution time information in results (default: false)"
                 }
             },
             required: ["queries"]
@@ -1144,10 +1148,11 @@ server.setRequestHandler(CallToolRequestSchema, async (request): Promise<ToolRes
 
         // Handle parallel search requests
         case "parallel_search": {
-            const { queries, maxParallel, outputDir } = request.params.arguments as {
+            const { queries, maxParallel, outputDir, includeTimings } = request.params.arguments as {
                 queries: string[];
                 maxParallel?: number;
                 outputDir?: string;
+                includeTimings?: boolean;
             };
 
             if (!queries || !Array.isArray(queries)) {
@@ -1172,48 +1177,52 @@ server.setRequestHandler(CallToolRequestSchema, async (request): Promise<ToolRes
 
                 const options = {
                     maxParallel: Math.min(maxParallel || 10, 10),
-                    outputDir: outputDirPath
+                    outputDir: outputDirPath,
+                    includeTimings
                 };
 
                 // Execute parallel searches
-                const results = await parallelSearch.parallelSearch(queries);
+                const startTime = Date.now();
+                const searchResult = await parallelSearch.parallelSearch(queries);
+                const totalTime = Date.now() - startTime;
                 
                 // Cleanup browser instances
                 await parallelSearch.cleanup();
 
-                // Format results for response
-                const successfulSearches = results.filter((r: ParallelSearchResult) => !r.error);
-                const failedSearches = results.filter((r: ParallelSearchResult) => r.error);
-
                 // Add successful results to the current session
-                successfulSearches.forEach((result: ParallelSearchResult) => {
-                    result.results.forEach(searchResult => {
-                        addResult({
-                            url: searchResult.url,
-                            title: searchResult.title,
-                            content: searchResult.snippet,
-                            timestamp: new Date().toISOString(),
+                searchResult.results
+                    .filter(r => !r.error)
+                    .forEach(result => {
+                        result.results.forEach(searchResult => {
+                            addResult({
+                                url: searchResult.url,
+                                title: searchResult.title,
+                                content: searchResult.snippet,
+                                timestamp: new Date().toISOString(),
+                            });
                         });
                     });
-                });
 
                 return {
                     content: [{
                         type: "text",
                         text: JSON.stringify({
                             summary: {
-                                totalQueries: queries.length,
-                                successful: successfulSearches.length,
-                                failed: failedSearches.length,
-                                outputDirectory: options.outputDir
+                                ...searchResult.summary,
+                                outputDirectory: options.outputDir,
+                                ...(includeTimings ? {
+                                    totalExecutionTime: totalTime,
+                                    averageExecutionTime: Math.round(totalTime / queries.length)
+                                } : {})
                             },
-                            results: results.map((r: ParallelSearchResult) => ({
+                            results: searchResult.results.map(r => ({
                                 searchId: r.searchId,
                                 query: r.query,
                                 status: r.error ? 'failed' : 'success',
                                 resultCount: r.results.length,
                                 error: r.error,
-                                results: r.results
+                                results: r.results,
+                                ...(includeTimings ? { executionTime: r.executionTime } : {})
                             }))
                         }, null, 2)
                     }]

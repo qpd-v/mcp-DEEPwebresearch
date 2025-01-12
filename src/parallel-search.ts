@@ -32,8 +32,27 @@ export class ParallelSearch {
             outputDir: path.isAbsolute(options.outputDir || '')
                 ? (options.outputDir || path.join(os.tmpdir(), 'search-results'))
                 : path.join(os.tmpdir(), options.outputDir || 'search-results'),
-            retryAttempts: options.retryAttempts || 3
+            retryAttempts: options.retryAttempts || 3,
+            includeTimings: options.includeTimings || false
         };
+    }
+
+    private getSearchResult(result: SearchResult[], searchId: string, query: string, startTime?: number, error?: string): ParallelSearchResult {
+        const base: ParallelSearchResult = {
+            searchId,
+            query,
+            results: result,
+            error
+        };
+
+        if (this.options.includeTimings && startTime) {
+            return {
+                ...base,
+                executionTime: Date.now() - startTime
+            };
+        }
+
+        return base;
     }
 
     private async initialize(): Promise<void> {
@@ -74,6 +93,7 @@ export class ParallelSearch {
         query: string,
         searchId: string
     ): Promise<ParallelSearchResult> {
+        const startTime = this.options.includeTimings ? Date.now() : undefined;
         const page = await context.newPage();
         try {
             await page.goto('https://www.google.com', { waitUntil: 'networkidle' });
@@ -130,25 +150,31 @@ export class ParallelSearch {
             }
 
             await this.saveResults(searchId, query, results);
-            
-            return {
-                searchId,
-                query,
-                results
-            };
+            return this.getSearchResult(results, searchId, query, startTime);
         } catch (error) {
-            return {
+            return this.getSearchResult(
+                [],
                 searchId,
                 query,
-                results: [],
-                error: error instanceof Error ? error.message : 'Unknown error occurred'
-            };
+                startTime,
+                error instanceof Error ? error.message : 'Unknown error occurred'
+            );
         } finally {
             await page.close();
         }
     }
 
-    public async parallelSearch(queries: string[]): Promise<ParallelSearchResult[]> {
+    public async parallelSearch(queries: string[]): Promise<{
+        results: ParallelSearchResult[];
+        summary: {
+            totalQueries: number;
+            successful: number;
+            failed: number;
+            totalExecutionTime?: number;
+            averageExecutionTime?: number;
+        };
+    }> {
+        const startTime = this.options.includeTimings ? Date.now() : undefined;
         await this.initialize();
 
         const results: ParallelSearchResult[] = [];
@@ -184,7 +210,30 @@ export class ParallelSearch {
             }
         }
 
-        return results;
+        const endTime = Date.now();
+        const successful = results.filter(r => !r.error).length;
+        const failed = results.filter(r => r.error).length;
+
+        const summary = {
+            totalQueries: queries.length,
+            successful,
+            failed,
+            ...(this.options.includeTimings && startTime ? {
+                totalExecutionTime: endTime - startTime,
+                averageExecutionTime: Math.round((endTime - startTime) / queries.length)
+            } : {})
+        };
+
+        // Add individual execution times to results if timing is enabled
+        const timedResults = this.options.includeTimings ? results.map(r => ({
+            ...r,
+            executionTime: r.executionTime || 0
+        })) : results;
+
+        return {
+            results: timedResults,
+            summary
+        };
     }
 
     public async cleanup(): Promise<void> {
