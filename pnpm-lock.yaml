@@ -18,11 +18,11 @@ importers:
         specifier: ^5.0.4
         version: 5.0.4
       turndown:
-        specifier: ^7.1.2
+        specifier: ^7.2.0
         version: 7.2.0
     devDependencies:
       '@types/turndown':
-        specifier: ^5.0.4
+        specifier: ^5.0.5
         version: 5.0.5
       shx:
         specifier: ^0.3.4
