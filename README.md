@@ -1,15 +1,35 @@
-# MCP Web Research Server
+# MCP Deep Web Research Server
 
-A Model Context Protocol (MCP) server for web research. 
+A Model Context Protocol (MCP) server for advanced web research. 
 
-Bring real-time info into Claude and easily research any topic.
+> This project is a fork of [mcp-webresearch](https://github.com/mzxrai/mcp-webresearch) by [mzxrai](https://github.com/mzxrai), enhanced with additional features for deep web research capabilities. We're grateful to the original creators for their foundational work.
+
+Bring real-time info into Claude with intelligent search queuing, enhanced content extraction, and deep research capabilities.
 
 ## Features
 
-- Google search integration
-- Webpage content extraction
-- Research session tracking (list of visited pages, search queries, etc.)
-- Screenshot capture
+- Intelligent Search Queue System
+  - Batch search operations with rate limiting
+  - Queue management with progress tracking
+  - Error recovery and automatic retries
+  - Search result deduplication
+  - Queue persistence between sessions
+
+- Enhanced Content Extraction
+  - TF-IDF based relevance scoring
+  - Keyword proximity analysis
+  - Content section weighting
+  - Readability scoring
+  - Improved HTML structure parsing
+  - Structured data extraction
+  - Better content cleaning and formatting
+
+- Core Features
+  - Google search integration
+  - Webpage content extraction
+  - Research session tracking
+  - Screenshot capture
+  - Markdown conversion with improved formatting
 
 ## Prerequisites
 
@@ -25,9 +45,9 @@ Next, add this entry to your `claude_desktop_config.json` (on Mac, found at `~/L
 ```json
 {
   "mcpServers": {
-    "webresearch": {
+    "deepwebresearch": {
       "command": "npx",
-      "args": ["-y", "@mzxrai/mcp-webresearch@latest"]
+      "args": ["-y", "@qpd-v/mcp-DEEPwebresearch@latest"]
     }
   }
 }
@@ -37,9 +57,7 @@ This config allows Claude Desktop to automatically start the web research MCP se
 
 ## Usage
 
-Simply start a chat with Claude and send a prompt that would benefit from web research. If you'd like a prebuilt prompt customized for deeper web research, you can use the `agentic-research` prompt that we provide through this package. Access that prompt in Claude Desktop by clicking the Paperclip icon in the chat input and then selecting `Choose an integration` → `webresearch` → `agentic-research`.
-
-<img src="https://i.ibb.co/N6Y3C0q/Screenshot-2024-12-05-at-11-01-27-PM.png" alt="Example screenshot of web research" width="400"/>
+Simply start a chat with Claude and send a prompt that would benefit from web research. If you'd like a prebuilt prompt customized for deeper web research, you can use the `agentic-research` prompt that we provide through this package. Access that prompt in Claude Desktop by clicking the Paperclip icon in the chat input and then selecting `Choose an integration` → `deepwebresearch` → `agentic-research`.
 
 ### Tools
 
@@ -47,13 +65,25 @@ Simply start a chat with Claude and send a prompt that would benefit from web re
    - Performs Google searches and extracts results
    - Arguments: `{ query: string }`
 
-2. `visit_page`
-   - Visits a webpage and extracts its content
+2. `parallel_search`
+   - Performs multiple Google searches in parallel with intelligent queuing
+   - Arguments: `{ queries: string[], maxParallel?: number }`
+
+3. `visit_page`
+   - Visits a webpage and extracts its content with enhanced relevance scoring
    - Arguments: `{ url: string, takeScreenshot?: boolean }`
 
-3. `take_screenshot`
+4. `take_screenshot`
    - Takes a screenshot of the current page
    - No arguments required
+
+5. `get_queue_status`
+   - Check the status of pending searches
+   - No arguments required
+
+6. `cancel_search`
+   - Cancel pending searches in the queue
+   - Arguments: `{ searchId?: string }` (omit searchId to cancel all)
 
 ### Prompts
 
@@ -76,21 +106,24 @@ When you take a screenshot, it's saved as an MCP resource. You can access captur
 #### Research Session
 
 The server maintains a research session that includes:
-- Search queries
-- Visited pages
-- Extracted content
+- Search queries and their results
+- Queue status and history
+- Visited pages with relevance scores
+- Extracted content with structure analysis
 - Screenshots
 - Timestamps
 
 ### Suggestions
 
-For the best results, if you choose not to use the `agentic-research` prompt when doing your research, it may be helpful to suggest high-quality sources for Claude to use when researching general topics. For example, you could prompt `news today from reuters or AP` instead of `news today`.
+For the best results, if you choose not to use the `agentic-research` prompt when doing your research, it may be helpful to:
+1. Use batch searches for broader topic coverage
+2. Leverage the queue system for extensive research
+3. Monitor search progress with queue status
+4. Suggest high-quality sources for Claude to use
 
 ## Problems
 
-This is very much pre-alpha code. And it is also AIGC, so expect bugs.
-
-If you run into issues, it may be helpful to check Claude Desktop's MCP logs:
+This is beta software. If you run into issues, it may be helpful to check Claude Desktop's MCP logs:
 
 ```bash
 tail -n 20 -f ~/Library/Logs/Claude/mcp*.log
@@ -120,12 +153,17 @@ pnpm dev
 ## Verified Platforms
 
 - [x] macOS
+- [x] Windows
 - [ ] Linux
 
 ## License
 
 MIT
 
+## Credits
+
+This project builds upon the excellent work of [mcp-webresearch](https://github.com/mzxrai/mcp-webresearch) by [mzxrai](https://github.com/mzxrai). The original codebase provided the foundation for our enhanced features and capabilities.
+
 ## Author
 
-[mzxrai](https://github.com/mzxrai) 
+[qpd-v](https://github.com/qpd-v)
