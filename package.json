@@ -1,14 +1,14 @@
 {
-  "name": "@mzxrai/mcp-webresearch",
+  "name": "@qpd-v/mcp-DEEPwebresearch",
   "version": "0.1.7",
-  "description": "MCP server for web research",
+  "description": "Enhanced MCP server for deep web research",
   "license": "MIT",
-  "author": "mzxrai",
-  "homepage": "https://github.com/mzxrai/mcp-webresearch",
-  "bugs": "https://github.com/mzxrai/mcp-webresearch/issues",
+  "author": "qpd-v",
+  "homepage": "https://github.com/qpd-v/mcp-DEEPwebresearch",
+  "bugs": "https://github.com/qpd-v/mcp-DEEPwebresearch/issues",
   "type": "module",
   "bin": {
-    "mcp-server-webresearch": "dist/index.js"
+    "mcp-server-deepwebresearch": "dist/index.js"
   },
   "files": [
     "dist"
@@ -28,7 +28,8 @@
     "model-context-protocol",
     "web-research",
     "ai",
-    "web-scraping"
+    "web-scraping",
+    "deep-web-research"
   ],
   "dependencies": {
     "@modelcontextprotocol/sdk": "1.0.1",
