@@ -115,7 +115,7 @@ export class SearchQueue extends EventEmitter {
                         await new Promise(resolve => setTimeout(resolve, Math.pow(2, item.retryCount) * 1000));
                     } else {
                         item.status = 'failed';
-                        item.error = error.message;
+                        item.error = error instanceof Error ? error.message : 'Unknown error occurred';
                         this.emit('itemFailed', item);
                     }
                 }
