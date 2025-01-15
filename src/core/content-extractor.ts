@@ -18,7 +18,7 @@ export class ContentExtractor {
 
     private boilerplateSelectors = [
         // Navigation elements
-        'nav', 'header', 'footer', 
+        'nav', 'header', 'footer',
         // Social sharing
         '.social-share', '.share-buttons', '[id*="share"]', '[class*="share"]',
         // Navigation menus
@@ -34,7 +34,7 @@ export class ContentExtractor {
         // Common UI elements
         '.header-content', '.footer-content', '.site-header', '.site-footer',
         // Cookie notices and banners
-        '.cookie-notice', '.cookie-banner', '.gdpr',
+        '.cookie-notice', '.cookie-banner', '.gdpr', '[class*="cookie"]', '[id*="cookie"]',
         // Search and related content
         '.search', '.search-form', '.related-posts', '.related-articles',
         // Common widget areas
@@ -48,7 +48,27 @@ export class ContentExtractor {
         // Common dynamic elements
         '[data-widget]', '[data-module]',
         // Common tracking and analytics
-        '[data-analytics]', '[data-tracking]'
+        '[data-analytics]', '[data-tracking]',
+        // Additional UI elements
+        'button', '[role="button"]', '.button', '.btn',
+        // Footer-like elements
+        '[class*="footer"]', '[id*="footer"]', 'c4d-footer', 'c4d-footer-container',
+        // Navigation-like elements
+        '[class*="nav"]', '[id*="nav"]', 'c4d-nav',
+        // Legal and policy elements
+        '[class*="legal"]', '[id*="legal"]', '[class*="policy"]', '[id*="policy"]',
+        // Common web components
+        'c4d-*',
+        // Additional cookie-related elements
+        '[class*="cookie-preferences"]', '[id*="cookie-preferences"]',
+        '[class*="cookie-settings"]', '[id*="cookie-settings"]',
+        '[class*="cookie-consent"]', '[id*="cookie-consent"]',
+        // Additional button-related elements
+        '[class*="btn-"]', '[id*="btn-"]', '[class*="button-"]', '[id*="button-"]',
+        // Additional navigation elements
+        '[class*="menu-"]', '[id*="menu-"]', '[class*="navigation-"]', '[id*="navigation-"]',
+        // Additional footer elements
+        '[class*="bottom-"]', '[id*="bottom-"]', '[class*="foot-"]', '[id*="foot-"]'
     ];
 
     private htmlToMarkdownOptions = {
@@ -203,14 +223,40 @@ export class ContentExtractor {
     }
 
     private cleanupDOM($: CheerioRoot): void {
+        console.log('Starting DOM cleanup...');
+
         // First pass: Remove obvious non-content elements
         $('script, style, noscript, iframe, form, link, meta').remove();
         $('[style*="display: none"], [style*="display:none"], [hidden]').remove();
         
-        // Second pass: Remove navigation and UI elements but preserve technical content
+        // Second pass: Identify and preserve main content areas
+        const mainContentSelectors = [
+            'article',
+            '[role="main"]',
+            'main',
+            '.main-content',
+            '#main-content',
+            '.post-content',
+            '.article-content',
+            '.entry-content',
+            '.content',
+            '.documentation',
+            '.markdown-body'
+        ];
+
+        let mainContent = $('body');
+        for (const selector of mainContentSelectors) {
+            const element = $(selector);
+            if (element.length > 0) {
+                mainContent = element;
+                console.log(`Found main content using selector: ${selector}`);
+                break;
+            }
+        }
+
+        // Third pass: Remove boilerplate from main content
         this.boilerplateSelectors.forEach(selector => {
-            // Don't remove elements that contain code or technical content
-            $(selector).each((_, elem) => {
+            mainContent.find(selector).each((_, elem) => {
                 const $elem = $(elem);
                 if (!this.containsTechnicalContent($elem)) {
                     $elem.remove();
@@ -218,8 +264,8 @@ export class ContentExtractor {
             });
         });
 
-        // Third pass: Clean up common UI patterns
-        $('*').each((_, elem) => {
+        // Fourth pass: Clean up remaining elements
+        mainContent.find('*').each((_, elem) => {
             const $elem = $(elem);
             const text = $elem.text().trim();
             
@@ -231,7 +277,8 @@ export class ContentExtractor {
             // Remove elements that are clearly UI components
             if (
                 text.match(/^(close|dismiss|accept|cancel|loading|\d+ min read|share|menu|search)$/i) ||
-                text.match(/^(follow us|subscribe|sign up|log in|register)$/i)
+                text.match(/^(follow us|subscribe|sign up|log in|register)$/i) ||
+                text.match(/^(cookie|privacy|terms|gdpr)/i)
             ) {
                 $elem.remove();
                 return;
@@ -243,9 +290,9 @@ export class ContentExtractor {
             }
         });
 
-        // Fourth pass: Remove duplicate content but preserve code blocks
+        // Fifth pass: Remove duplicate content but preserve code blocks
         const seen = new Set<string>();
-        $('p, li, td, div').each((_, elem) => {
+        mainContent.find('p, li, td, div').each((_, elem) => {
             const $elem = $(elem);
             if (this.containsTechnicalContent($elem)) {
                 return; // Don't deduplicate technical content
@@ -257,6 +304,10 @@ export class ContentExtractor {
                 seen.add(text);
             }
         });
+
+        // Replace body content with cleaned main content
+        $('body').empty().append(mainContent);
+        console.log('DOM cleanup complete');
     }
 
     private containsTechnicalContent($elem: cheerio.Cheerio): boolean {
@@ -356,47 +407,51 @@ export class ContentExtractor {
     }
 
     private extractContentSections($: CheerioRoot): ContentSection[] {
+        console.log('Starting content section extraction...');
         const sections: ContentSection[] = [];
 
-        // Try to find main content container
+        // Enhanced main content selectors with scoring
         const mainSelectors = [
-            'article',
-            '[role="main"]',
-            'main',
-            '.main-content',
-            '#main-content',
-            '.post-content',
-            '.article-content',
-            '.entry-content',
-            '.content',
-            '.documentation',
-            '.markdown-body'
+            { selector: 'article[class*="content"]', score: 10 },
+            { selector: '[role="main"]', score: 9 },
+            { selector: 'main', score: 8 },
+            { selector: '.main-content', score: 8 },
+            { selector: '#main-content', score: 8 },
+            { selector: '.post-content', score: 7 },
+            { selector: '.article-content', score: 7 },
+            { selector: '.entry-content', score: 7 },
+            { selector: '.content', score: 6 },
+            { selector: '.documentation', score: 8 },
+            { selector: '.markdown-body', score: 7 },
+            { selector: '[itemprop="articleBody"]', score: 8 },
+            { selector: '[data-content-type="article"]', score: 8 }
         ];
 
-        let mainContent: cheerio.Cheerio = $('body');  // Default to body
-        for (const selector of mainSelectors) {
-            const element = $(selector);
-            if (element.length > 0) {
-                mainContent = element;
-                break;
-            }
-        }
+        // Find best content container based on scoring
+        let bestScore = 0;
+        let mainContent: cheerio.Cheerio = $('body');
 
-        // First pass: identify technical sections
-        const technicalBlocks: { element: cheerio.Element; importance: number }[] = [];
-        mainContent.find('pre, code, .example, .implementation, .method, .function').each((_, element) => {
-            const $element = $(element);
-            // Get the parent container that includes context
-            const container = this.findContextContainer($, $element);
-            if (container.length) {
-                technicalBlocks.push({
-                    element: container[0],
-                    importance: this.calculateImportance(container)
-                });
-            }
+        mainSelectors.forEach(({ selector, score }) => {
+            const elements = $(selector);
+            elements.each((_, element) => {
+                const $element = $(element);
+                let elementScore = score;
+
+                // Boost score based on content quality
+                elementScore += this.evaluateContentQuality($element);
+
+                if (elementScore > bestScore) {
+                    bestScore = elementScore;
+                    mainContent = $element;
+                    console.log(`Found better content container: ${selector} (score: ${elementScore})`);
+                }
+            });
         });
 
-        // Extract sections from main content
+        // Clean up the selected content container
+        this.cleanupContentContainer($, mainContent);
+
+        // Extract sections based on semantic structure
         let currentSection: ContentSection = {
             id: 'main',
             content: '',
@@ -404,53 +459,97 @@ export class ContentExtractor {
             type: 'main'
         };
 
-        mainContent.children().each((_, element) => {
+        // Process content hierarchically
+        mainContent.find('h1, h2, h3, h4, h5, h6, p, pre, code, .example, .implementation, .method, .function, section, article').each((_, element) => {
             const $element = $(element);
+            const text = $element.text().trim();
             
-            // Skip if element is empty or contains only whitespace
-            if (!$element.text().trim()) return;
-            
-            // Check if this element is part of a technical block
-            const isTechnicalBlock = technicalBlocks.some(block =>
-                $.contains(block.element, element) || element === block.element
-            );
+            if (!text) return;
 
-            // Start new section on headings or technical blocks
-            if ($element.is('h1, h2, h3') || isTechnicalBlock) {
+            // Check for section breaks
+            const isHeading = $element.is('h1, h2, h3, h4, h5, h6');
+            const isTechnical = this.containsTechnicalContent($element);
+            const isNewSection = $element.is('section, article') && $element.find('h1, h2, h3, h4, h5, h6').length > 0;
+
+            if (isHeading || isTechnical || isNewSection) {
+                // Save current section if it has content
                 if (currentSection.content.trim()) {
                     sections.push(currentSection);
                 }
 
-                const importance = isTechnicalBlock ?
-                    Math.max(0.8, this.calculateImportance($element)) :
-                    this.calculateImportance($element);
+                // Calculate importance
+                const importance = this.calculateSectionImportance($element, isHeading, isTechnical);
 
+                // Create new section
                 currentSection = {
                     id: `section-${sections.length + 1}`,
-                    title: $element.is('h1, h2, h3') ? $element.text().trim() : 'Technical Section',
-                    content: $element.html() || '',
+                    title: isHeading ? text : (isTechnical ? 'Technical Content' : 'Content Section'),
+                    content: '',
                     importance,
-                    type: isTechnicalBlock ? 'technical' : 'main'
+                    type: isTechnical ? 'technical' : 'main'
                 };
+            }
 
-                // For technical blocks, include surrounding context
-                if (isTechnicalBlock) {
-                    const context = this.getContextualContent($, $element);
-                    if (context) {
-                        currentSection.content = context;
-                    }
-                }
+            // Add content to current section
+            if (isTechnical) {
+                // Include context for technical content
+                const context = this.getContextualContent($, $element);
+                currentSection.content += '\n' + (context || $element.html() || '');
             } else {
                 currentSection.content += '\n' + ($element.html() || '');
             }
         });
 
-        // Add the last section if it has content
+        // Add final section
         if (currentSection.content.trim()) {
             sections.push(currentSection);
         }
 
+        console.log(`Extracted ${sections.length} content sections`);
         return sections;
+    }
+
+    private evaluateContentQuality($element: cheerio.Cheerio): number {
+        let score = 0;
+
+        // Check for technical content density
+        const text = $element.text();
+        const technicalTerms = text.match(/\b(api|function|method|class|interface|example|implementation|code|return|parameter)\b/gi);
+        if (technicalTerms) {
+            score += technicalTerms.length * 0.5;
+        }
+
+        // Check for code blocks
+        score += $element.find('pre, code').length * 2;
+
+        // Check for proper content structure
+        score += $element.find('h1, h2, h3, h4, h5, h6').length;
+        score += $element.find('p').length * 0.5;
+        score += $element.find('ul, ol').length;
+
+        // Penalize for common boilerplate
+        score -= $element.find(this.boilerplateSelectors.join(', ')).length * 2;
+
+        return score;
+    }
+
+    private calculateSectionImportance($element: cheerio.Cheerio, isHeading: boolean, isTechnical: boolean): number {
+        let importance = 0.5;
+
+        if (isHeading) {
+            const level = parseInt($element.prop('tagName').slice(1));
+            importance = Math.max(0.5, 1 - (level - 1) * 0.1);
+        }
+
+        if (isTechnical) {
+            importance += 0.3;
+        }
+
+        // Boost importance based on content quality
+        const contentQuality = this.evaluateContentQuality($element);
+        importance += Math.min(0.2, contentQuality * 0.05);
+
+        return Math.min(1, importance);
     }
 
     private findContextContainer($: CheerioRoot, $element: cheerio.Cheerio): cheerio.Cheerio {
@@ -604,6 +703,67 @@ export class ContentExtractor {
             .replace(/```/g, '\n```\n')
             .replace(/\n{4,}/g, '\n\n\n')
             .trim();
+    }
+
+    private cleanupContentContainer($: CheerioRoot, $container: cheerio.Cheerio): void {
+        console.log('Cleaning up content container...');
+
+        // Remove nested boilerplate elements
+        this.boilerplateSelectors.forEach(selector => {
+            $container.find(selector).each((_, elem) => {
+                const $elem = $(elem);
+                // Keep element if it contains technical content
+                if (!this.containsTechnicalContent($elem)) {
+                    $elem.remove();
+                }
+            });
+        });
+
+        // Remove empty elements
+        $container.find('*').each((_, elem) => {
+            const $elem = $(elem);
+            const text = $elem.text().trim();
+            
+            // Skip technical content and elements with images
+            if (this.containsTechnicalContent($elem) || $elem.find('img').length > 0) {
+                return;
+            }
+
+            // Remove if empty or just whitespace
+            if (!text || text.length < 3) {
+                $elem.remove();
+                return;
+            }
+
+            // Remove common UI text patterns
+            if (
+                text.match(/^(close|dismiss|accept|cancel|loading|\d+ min read|share|menu|search)$/i) ||
+                text.match(/^(follow us|subscribe|sign up|log in|register)$/i) ||
+                text.match(/^(cookie|privacy|terms|gdpr)/i)
+            ) {
+                $elem.remove();
+            }
+        });
+
+        // Remove duplicate content
+        const seen = new Set<string>();
+        $container.find('p, li, td, div').each((_, elem) => {
+            const $elem = $(elem);
+            
+            // Skip technical content
+            if (this.containsTechnicalContent($elem)) {
+                return;
+            }
+
+            const text = $elem.text().trim();
+            if (text && seen.has(text)) {
+                $elem.remove();
+            } else {
+                seen.add(text);
+            }
+        });
+
+        console.log('Content container cleanup complete');
     }
 
     private truncateContent(content: string, maxLength?: number): string {

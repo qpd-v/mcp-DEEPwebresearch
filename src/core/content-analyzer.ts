@@ -8,6 +8,37 @@ export class ContentAnalyzer {
     private stemmer: typeof natural.PorterStemmerFr;
     private technicalTerms: Set<string>;
     private boilerplatePatterns: RegExp[];
+
+    private isTechnicalContent(text: string): boolean {
+        const technicalIndicators = [
+            'example',
+            'implementation',
+            'usage',
+            'api',
+            'method',
+            'function',
+            'parameter',
+            'return',
+            'class',
+            'interface',
+            'object',
+            'pattern'
+        ];
+
+        const lowerText = text.toLowerCase();
+        return technicalIndicators.some(indicator => lowerText.includes(indicator)) ||
+               text.includes('```') ||
+               /`[^`]+`/.test(text);
+    }
+
+    private extractTechnicalTermsFromText(text: string): string[] {
+        const words = text.toLowerCase().split(/\W+/);
+        return words.filter(word =>
+            word.length > 3 &&
+            this.technicalTerms.has(word) &&
+            !this.isStopWord(word)
+        );
+    }
     
     constructor() {
         this.tokenizer = new natural.WordTokenizer();
@@ -111,11 +142,13 @@ export class ContentAnalyzer {
     }
 
     private async extractTopics(content: ExtractedContent, options: AnalysisOptions): Promise<Topic[]> {
+        console.log('Extracting topics from content...');
         const maxTopics = options.maxTopics || 8;
-        const minConfidence = options.minConfidence || 0.15; // Lowered threshold
+        const minConfidence = options.minConfidence || 0.15;
 
         // Split content into sections
         const sections = content.content.split(/\n\n+/);
+        console.log(`Found ${sections.length} sections to analyze`);
         
         // Initialize topic tracking
         const topicMentions = new Map<string, {
@@ -124,18 +157,27 @@ export class ContentAnalyzer {
             keywords: Set<string>
         }>();
 
+        // Enhanced topic indicators for quantum computing
+        const topicIndicators = [
+            // General technical patterns
+            { pattern: /(?:using|implementing|creating)\s+(\w+(?:\s+\w+){0,2})\s+(?:pattern|approach|method)/i, weight: 1.2 },
+            { pattern: /(?:best\s+practice|recommended)\s+(?:is|for)\s+(\w+(?:\s+\w+){0,2})/i, weight: 1.1 },
+            { pattern: /(\w+(?:\s+\w+){0,2})\s+implementation/i, weight: 1.0 },
+            { pattern: /(\w+(?:\s+\w+){0,2})\s+(?:wrapper|api|interface)/i, weight: 1.0 },
+            
+            // Domain-specific patterns
+            { pattern: /(?:quantum)\s+(\w+(?:\s+\w+){0,2})/i, weight: 1.3 },
+            { pattern: /(\w+(?:\s+\w+){0,2})\s+(?:qubit|qubits)/i, weight: 1.3 },
+            { pattern: /(\w+(?:\s+\w+){0,2})\s+(?:algorithm|computation)/i, weight: 1.2 },
+            { pattern: /(?:advances?|developments?|breakthroughs?)\s+in\s+(\w+(?:\s+\w+){0,2})/i, weight: 1.2 }
+        ];
+
         // Analyze each section
-        sections.forEach(section => {
+        sections.forEach((section, index) => {
+            console.log(`Analyzing section ${index + 1}...`);
             const sectionLower = section.toLowerCase();
             
             // Look for topic indicators
-            const topicIndicators = [
-                { pattern: /(?:using|implementing|creating)\s+(\w+(?:\s+\w+){0,2})\s+(?:pattern|approach|method)/i, weight: 1.2 },
-                { pattern: /(?:best\s+practice|recommended)\s+(?:is|for)\s+(\w+(?:\s+\w+){0,2})/i, weight: 1.1 },
-                { pattern: /(\w+(?:\s+\w+){0,2})\s+implementation/i, weight: 1.0 },
-                { pattern: /(\w+(?:\s+\w+){0,2})\s+(?:wrapper|api|interface)/i, weight: 1.0 }
-            ];
-
             topicIndicators.forEach(({ pattern, weight }) => {
                 const matches = sectionLower.match(pattern);
                 if (matches && matches[1]) {
@@ -149,32 +191,67 @@ export class ContentAnalyzer {
                     keywords.forEach(k => existing.keywords.add(k));
                     
                     topicMentions.set(topic, existing);
+                    console.log(`Found topic: ${topic} (weight: ${weight})`);
                 }
             });
+
+            // Look for technical content
+            if (this.isTechnicalContent(section)) {
+                const terms = this.extractTechnicalTermsFromText(section);
+                terms.forEach((term: string) => {
+                    const existing = topicMentions.get(term) || { count: 0, contexts: [], keywords: new Set() };
+                    existing.count += 0.7;
+                    existing.contexts.push(section);
+                    topicMentions.set(term, existing);
+                });
+            }
 
             // Look for code examples
             if (section.includes('```') || section.includes('`')) {
                 const codeKeywords = this.extractCodeKeywords(section);
                 codeKeywords.forEach(keyword => {
                     const existing = topicMentions.get(keyword) || { count: 0, contexts: [], keywords: new Set() };
-                    existing.count += 0.5;
+                    existing.count += 0.8;
                     existing.contexts.push(section);
                     topicMentions.set(keyword, existing);
+                    console.log(`Found code keyword: ${keyword}`);
                 });
             }
         });
 
-        // Convert to topics
+        console.log(`Found ${topicMentions.size} potential topics`);
+
+        // Convert to topics with enhanced scoring
         const topics: Topic[] = Array.from(topicMentions.entries())
-            .map(([name, data]) => ({
-                name,
-                confidence: Math.min(1, data.count / 3),
-                keywords: Array.from(data.keywords)
-            }))
-            .filter(topic => topic.confidence >= minConfidence)
+            .map(([name, data]) => {
+                // Calculate confidence with context bonus
+                let confidence = Math.min(1, data.count / 3);
+                
+                // Boost confidence for topics with multiple contexts
+                if (data.contexts.length > 1) {
+                    confidence *= 1.2;
+                }
+                
+                // Boost confidence for topics with technical keywords
+                if (data.keywords.size > 2) {
+                    confidence *= 1.1;
+                }
+
+                return {
+                    name,
+                    confidence: Math.min(1, confidence),
+                    keywords: Array.from(data.keywords)
+                };
+            })
+            .filter(topic => {
+                const meetsThreshold = topic.confidence >= minConfidence;
+                console.log(`Topic ${topic.name}: confidence ${topic.confidence} ${meetsThreshold ? 'accepted' : 'rejected'}`);
+                return meetsThreshold;
+            })
             .sort((a, b) => b.confidence - a.confidence)
             .slice(0, maxTopics);
 
+        console.log(`Extracted ${topics.length} topics above confidence threshold`);
         return topics;
     }
 

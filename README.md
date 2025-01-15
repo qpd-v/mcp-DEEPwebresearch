@@ -1,4 +1,8 @@
-# MCP Deep Web Research Server (v0.2.3)
+# MCP Deep Web Research Server (v0.2.7)
+
+[![Node.js Version](https://img.shields.io/badge/node-%3E%3D18-brightgreen.svg)](https://nodejs.org/)
+[![TypeScript](https://img.shields.io/badge/TypeScript-5.0-blue.svg)](https://www.typescriptlang.org/)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
 A Model Context Protocol (MCP) server for advanced web research.
 
@@ -71,7 +75,42 @@ Simply start a chat with Claude and send a prompt that would benefit from web re
 
 1. `search_google`
    - Performs Google searches and extracts results
-   - Arguments: `{ query: string }`
+   - Arguments:
+     ```typescript
+     {
+       query: string;
+       maxResults?: number;    // default: 10
+       includeSnippets?: boolean;  // default: true
+     }
+     ```
+
+2. `deep_research`
+   - Performs comprehensive research with content analysis
+   - Arguments:
+     ```typescript
+     {
+       topic: string;
+       maxDepth?: number;      // default: 3
+       maxBranching?: number;  // default: 5
+       timeout?: number;       // default: 300000 (5 minutes)
+       minRelevanceScore?: number;  // default: 0.5
+     }
+     ```
+   - Returns:
+     ```typescript
+     {
+       findings: {
+         mainTopics: Array<{name: string, importance: number}>;
+         keyInsights: Array<{text: string, confidence: number}>;
+         sources: Array<{url: string, credibilityScore: number}>;
+       };
+       progress: {
+         completedSteps: number;
+         totalSteps: number;
+         processedUrls: number;
+       };
+     }
+     ```
 
 2. `parallel_search`
    - Performs multiple Google searches in parallel with intelligent queuing
@@ -129,15 +168,53 @@ For the best results, if you choose not to use the `agentic-research` prompt whe
 3. Monitor search progress with queue status
 4. Suggest high-quality sources for Claude to use
 
-## Problems
+## Configuration Options
 
-This is beta software. If you run into issues, it may be helpful to check Claude Desktop's MCP logs:
+The server can be configured through environment variables:
 
-```bash
-tail -n 20 -f ~/Library/Logs/Claude/mcp*.log
-```
+- `MAX_PARALLEL_SEARCHES`: Maximum number of concurrent searches (default: 10)
+- `SEARCH_DELAY_MS`: Delay between searches in milliseconds (default: 200)
+- `MAX_RETRIES`: Number of retry attempts for failed requests (default: 3)
+- `TIMEOUT_MS`: Request timeout in milliseconds (default: 30000)
+- `LOG_LEVEL`: Logging level (default: 'info')
+
+## Error Handling
+
+### Common Issues
+
+1. Rate Limiting
+   - Symptom: "Too many requests" error
+   - Solution: Increase `SEARCH_DELAY_MS` or decrease `MAX_PARALLEL_SEARCHES`
+
+2. Network Timeouts
+   - Symptom: "Request timed out" error
+   - Solution: Increase `TIMEOUT_MS` or check network connection
+
+3. Browser Issues
+   - Symptom: "Browser failed to launch" error
+   - Solution: Ensure Playwright is properly installed (`npx playwright install`)
+
+### Debugging
+
+This is beta software. If you run into issues:
+
+1. Check Claude Desktop's MCP logs:
+   ```bash
+   # On macOS
+   tail -n 20 -f ~/Library/Logs/Claude/mcp*.log
+   
+   # On Windows
+   Get-Content -Path "$env:APPDATA\Claude\logs\mcp*.log" -Tail 20 -Wait
+   ```
+
+2. Enable debug logging:
+   ```bash
+   export LOG_LEVEL=debug
+   ```
 
 ## Development
+
+### Setup
 
 ```bash
 # Install dependencies
@@ -152,6 +229,56 @@ pnpm watch
 # Run in development mode
 pnpm dev
 ```
+
+### Testing
+
+```bash
+# Run all tests
+pnpm test
+
+# Run tests in watch mode
+pnpm test:watch
+
+# Run tests with coverage
+pnpm test:coverage
+```
+
+### Code Quality
+
+```bash
+# Run linter
+pnpm lint
+
+# Fix linting issues
+pnpm lint:fix
+
+# Type check
+pnpm type-check
+```
+
+## Contributing
+
+1. Fork the repository
+2. Create your feature branch (`git checkout -b feature/amazing-feature`)
+3. Commit your changes (`git commit -m 'Add some amazing feature'`)
+4. Push to the branch (`git push origin feature/amazing-feature`)
+5. Open a Pull Request
+
+### Coding Standards
+
+- Follow TypeScript best practices
+- Maintain test coverage above 80%
+- Document new features and APIs
+- Update CHANGELOG.md for significant changes
+- Follow semantic versioning
+
+### Performance Considerations
+
+- Use batch operations where possible
+- Implement proper error handling and retries
+- Consider memory usage with large datasets
+- Cache results when appropriate
+- Use streaming for large content
 
 ## Requirements
 
