@@ -162,36 +162,58 @@ export class ResearchSession implements IResearchSession {
     }
 
     public async processUrl(url: string, depth: number = 0): Promise<StepResult> {
+        console.log(`Processing URL: ${url} at depth ${depth}`);
+        
         if (this.visitedUrls.has(url)) {
+            console.log(`URL already visited: ${url}`);
             return { searchResults: [] };
         }
 
         try {
-            // Extract content from URL
-            const content = await this.contentExtractor.extract(await this.fetchContent(url), url);
+            console.log('Fetching content...');
+            const htmlContent = await this.fetchContent(url);
+            console.log('Content fetched, length:', htmlContent.length);
+
+            console.log('Extracting content...');
+            const content = await this.contentExtractor.extract(htmlContent, url);
+            console.log('Content extracted, title:', content.title);
             this.visitedUrls.add(url);
 
-            // Analyze content
+            console.log('Analyzing content...');
             const analysis = await this.contentAnalyzer.analyze(content);
+            console.log('Analysis complete:', {
+                topics: analysis.topics.length,
+                keyPoints: analysis.keyPoints.length,
+                relevanceScore: analysis.relevanceScore
+            });
 
             // Update progress
             this.progress.processedContent++;
             this.progress.visitedUrls.add(url);
             this.updateTimestamp();
 
-            // Process findings
+            console.log('Processing findings...');
             await this.processFindings(content, analysis, depth);
+            console.log('Findings processed');
 
-            return {
-                searchResults: [{ 
-                    url, 
-                    title: content.title, 
-                    snippet: content.content.substring(0, 200), 
-                    relevanceScore: analysis.relevanceScore 
+            const result = {
+                searchResults: [{
+                    url,
+                    title: content.title,
+                    snippet: content.content.substring(0, 200),
+                    relevanceScore: analysis.relevanceScore
                 }],
                 extractedContents: [content],
                 analysis
             };
+
+            console.log('URL processing complete:', {
+                title: content.title,
+                contentLength: content.content.length,
+                relevanceScore: analysis.relevanceScore
+            });
+
+            return result;
         } catch (error) {
             console.error(`Error processing URL ${url}:`, error);
             return { searchResults: [] };
@@ -227,24 +249,45 @@ export class ResearchSession implements IResearchSession {
     }
 
     private async processFindings(content: ExtractedContent, analysis: ContentAnalysis, depth: number): Promise<void> {
+        console.log('Processing findings for:', content.url);
+        
         try {
             // Extract code blocks and technical sections first
+            console.log('Extracting code blocks and technical sections...');
             const codeBlocks = this.extractCodeBlocks(content.content);
             const technicalSections = this.extractTechnicalSections(content.content);
+            console.log('Found:', {
+                codeBlocks: codeBlocks.length,
+                technicalSections: technicalSections.length
+            });
 
             // Update main topics with higher weight for technical content
+            console.log('Updating topics...');
+            console.log('Before update - Topics:', this.findings.mainTopics.length);
             this.updateTopics(analysis, technicalSections);
+            console.log('After update - Topics:', this.findings.mainTopics.length);
 
             // Update key insights with code examples
+            console.log('Updating insights...');
+            console.log('Before update - Insights:', this.findings.keyInsights.length);
             this.updateInsights(analysis, codeBlocks, technicalSections);
+            console.log('After update - Insights:', this.findings.keyInsights.length);
 
             // Update sources with technical content score
+            console.log('Updating sources...');
+            console.log('Before update - Sources:', this.findings.sources.length);
             this.updateSources(content, analysis, technicalSections.length > 0);
+            console.log('After update - Sources:', this.findings.sources.length);
 
             // Process related URLs if within depth limit
             if (depth < this.options.maxDepth) {
+                console.log(`Processing related URLs at depth ${depth}...`);
                 await this.processRelatedUrls(content, depth + 1);
+            } else {
+                console.log(`Max depth ${this.options.maxDepth} reached, skipping related URLs`);
             }
+
+            console.log('Findings processing complete');
         } catch (error) {
             console.error('Error processing findings:', error);
         }
@@ -296,7 +339,22 @@ export class ResearchSession implements IResearchSession {
     }
 
     private updateTopics(analysis: ContentAnalysis, technicalSections: string[]): void {
+        console.log('Updating topics with analysis:', {
+            topicsCount: analysis.topics ? analysis.topics.length : 0,
+            technicalSectionsCount: technicalSections.length
+        });
+
+        if (!analysis.topics || analysis.topics.length === 0) {
+            console.log('No topics found in analysis');
+            return;
+        }
+
         analysis.topics.forEach(topic => {
+            console.log('Processing topic:', {
+                name: topic.name,
+                confidence: topic.confidence
+            });
+
             const existingTopic = this.findings.mainTopics.find(t => t.name === topic.name);
             const hasTechnicalContent = technicalSections.some(section =>
                 section.toLowerCase().includes(topic.name.toLowerCase())
@@ -306,9 +364,17 @@ export class ResearchSession implements IResearchSession {
                 Math.min(1, topic.confidence * 1.3) :
                 topic.confidence;
 
+            console.log('Topic analysis:', {
+                hasTechnicalContent,
+                originalConfidence: topic.confidence,
+                adjustedConfidence
+            });
+
             if (existingTopic) {
+                console.log('Updating existing topic:', existingTopic.name);
                 existingTopic.importance = Math.max(existingTopic.importance, adjustedConfidence);
             } else {
+                console.log('Adding new topic:', topic.name);
                 this.findings.mainTopics.push({
                     name: topic.name,
                     importance: adjustedConfidence,
@@ -320,6 +386,7 @@ export class ResearchSession implements IResearchSession {
 
         // Sort topics by importance
         this.findings.mainTopics.sort((a, b) => b.importance - a.importance);
+        console.log('Updated topics count:', this.findings.mainTopics.length);
     }
 
     private updateInsights(analysis: ContentAnalysis, codeBlocks: string[], technicalSections: string[]): void {

@@ -82,6 +82,9 @@ export class DeepResearch {
     }
 
     public async startResearch(topic: string, options: DeepResearchOptions = {}): Promise<ResearchResult> {
+        console.log('Starting research for topic:', topic);
+        console.log('Options:', options);
+
         // Create new research session
         const session = new ResearchSession(topic, {
             maxDepth: options.maxDepth,
@@ -91,11 +94,12 @@ export class DeepResearch {
             maxParallelOperations: options.maxParallelOperations
         });
 
+        console.log('Created research session:', session.id);
         this.activeSessions.set(session.id, session);
 
         try {
-            // Perform initial search with more targeted queries
-            const searchResults = await this.parallelSearch.parallelSearch([
+            console.log('Performing initial parallel search...');
+            const queries = [
                 topic,
                 `${topic} tutorial`,
                 `${topic} guide`,
@@ -104,26 +108,52 @@ export class DeepResearch {
                 `${topic} code`,
                 `${topic} design pattern`,
                 `${topic} best practice`
-            ]);
+            ];
+            console.log('Search queries:', queries);
+
+            const searchResults = await this.parallelSearch.parallelSearch(queries);
+            console.log('Parallel search complete. Results:', searchResults.results.length);
 
             // Filter and sort results by relevance
             const allResults = searchResults.results.flatMap(result => result.results);
+            console.log('Total results:', allResults.length);
+
             const uniqueResults = this.deduplicateResults(allResults);
+            console.log('Unique results:', uniqueResults.length);
+
             const sortedResults = uniqueResults.sort((a, b) => b.relevanceScore - a.relevanceScore);
+            console.log('Results sorted by relevance');
 
             // Process top results first
+            console.log('Processing top 5 results...');
             const topResults = sortedResults.slice(0, 5);
-            await Promise.all(topResults.map(r => session.processUrl(r.url)));
+            await Promise.all(topResults.map(r => {
+                console.log('Processing URL:', r.url);
+                return session.processUrl(r.url);
+            }));
 
             // Process remaining results
+            console.log('Processing remaining results...');
             const remainingResults = sortedResults.slice(5);
-            await Promise.all(remainingResults.map(r => session.processUrl(r.url)));
+            await Promise.all(remainingResults.map(r => {
+                console.log('Processing URL:', r.url);
+                return session.processUrl(r.url);
+            }));
 
             // Complete the session
+            console.log('Completing session...');
             await session.complete();
 
-            // Return formatted results
-            return this.formatResults(session);
+            // Format and return results
+            console.log('Formatting results...');
+            const results = this.formatResults(session);
+            console.log('Research complete. Found:', {
+                mainTopics: results.findings.mainTopics.length,
+                keyInsights: results.findings.keyInsights.length,
+                sources: results.findings.sources.length
+            });
+
+            return results;
         } catch (error) {
             console.error(`Error in research session ${session.id}:`, error);
             throw error;

@@ -58,22 +58,37 @@ export class ContentAnalyzer {
     }
 
     public async analyze(content: ExtractedContent, options: AnalysisOptions = {}): Promise<ContentAnalysis> {
+        console.log('Starting content analysis for URL:', content.url);
+        console.log('Content length:', content.content.length);
+
         // Prepare content for analysis
         const tokens = this.tokenizeContent(content.content);
         this.tfidf.addDocument(tokens);
+        console.log('Tokenized content length:', tokens.length);
 
         // Extract topics and calculate relevance
+        console.log('Extracting topics...');
         const topics = await this.extractTopics(content, options);
+        console.log('Found topics:', topics.length, topics.map(t => t.name));
+
+        console.log('Extracting key points...');
         const keyPoints = this.extractKeyPoints(content, topics, options);
+        console.log('Found key points:', keyPoints.length);
+
+        console.log('Extracting entities...');
         const entities = this.extractEntities(content);
+        console.log('Found entities:', entities.length);
+
         const relationships = this.findRelationships(entities, content);
         const sentiment = this.analyzeSentiment(content.content);
         const quality = this.assessQuality(content);
 
         // Merge similar topics
+        console.log('Merging similar topics...');
         const mergedTopics = this.mergeSimilarTopics(topics);
+        console.log('After merging:', mergedTopics.length, mergedTopics.map(t => t.name));
 
-        return {
+        const result = {
             relevanceScore: this.calculateRelevanceScore(content, mergedTopics),
             topics: mergedTopics,
             keyPoints: this.deduplicateKeyPoints(keyPoints),
@@ -83,6 +98,12 @@ export class ContentAnalyzer {
             citations: this.extractCitations(content),
             quality
         };
+
+        console.log('Analysis complete. Topics:', result.topics.length);
+        console.log('Key points:', result.keyPoints.length);
+        console.log('Relevance score:', result.relevanceScore);
+
+        return result;
     }
 
     private tokenizeContent(text: string): string[] {

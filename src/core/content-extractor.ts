@@ -137,40 +137,69 @@ export class ContentExtractor {
     }
 
     public async extract(html: string, url: string, options: ContentExtractionOptions = {}): Promise<ExtractedContent> {
+        console.log('Starting content extraction for URL:', url);
+        console.log('Initial HTML length:', html.length);
+
         const $ = cheerio.load(html);
+        console.log('DOM loaded successfully');
         
         // Remove unwanted elements
+        console.log('Cleaning up DOM...');
         this.cleanupDOM($);
+        console.log('DOM cleanup complete');
 
         // Extract metadata
+        console.log('Extracting metadata...');
         const metadata = this.extractMetadata($);
+        console.log('Metadata extracted:', metadata);
 
         // Extract main content sections
+        console.log('Extracting content sections...');
         const sections = this.extractContentSections($);
+        console.log('Found sections:', sections.length);
+        sections.forEach((section, index) => {
+            console.log(`Section ${index + 1}:`, {
+                id: section.id,
+                type: section.type,
+                title: section.title,
+                importance: section.importance,
+                contentLength: section.content.length
+            });
+        });
 
         // Extract structured data
-        const structuredData = options.extractStructuredData ? 
+        const structuredData = options.extractStructuredData ?
             this.extractStructuredData($) : undefined;
 
         // Convert content to markdown
+        console.log('Converting content to markdown...');
         const mainContent = sections
-            .map(section => section.content) // Include all sections
+            .map(section => section.content)
             .join('\n\n');
 
         const content = htmlToMd(mainContent, this.htmlToMarkdownOptions);
+        console.log('Markdown conversion complete. Length:', content.length);
 
         // Clean up and format the content
+        console.log('Cleaning and formatting content...');
         const cleanedContent = this.cleanContent(this.formatMarkdown(content));
+        console.log('Content cleanup complete. Final length:', cleanedContent.length);
 
-        return {
+        const title = this.extractTitle($);
+        console.log('Extracted title:', title);
+
+        const result = {
             url,
-            title: this.extractTitle($),
+            title,
             content: this.truncateContent(cleanedContent, options.maxContentLength),
             html: options.includeHtml ? html : undefined,
             timestamp: new Date().toISOString(),
             metadata,
             structuredData
         };
+
+        console.log('Content extraction complete');
+        return result;
     }
 
     private cleanupDOM($: CheerioRoot): void {

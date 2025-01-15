@@ -1,0 +1,15 @@
+Deep Research Report on Quantum Computing Advancements
+
+Sources:
+1. [Quantum Computers News](https://www.sciencedaily.com/news/computers_math/quantum_computers/)
+2. [2025 Will See Huge Advances in Quantum Computing. So What is a Quantum Chip And How Does it Work?](https://thequantuminsider.com/2025/01/08/2025-will-see-huge-advances-in-quantum-computing-so-what-is-a-quantum-chip-and-how-does-it-work/)
+3. [5 breakthroughs made possible by quantum technologies](https://www.polytechnique-insights.com/en/columns/science/5-breakthroughs-made-possible-by-quantum-technologies/)
+4. [Quantum Computing: Developments in the UK and US | Inside Privacy](https://www.insideprivacy.com/data-privacy/quantum-computing-developments-in-the-uk-and-us/)
+5. [Exploring the Latest Quantum Computing Advancements in 2024 - FirstIgnite](https://firstignite.com/exploring-the-latest-quantum-computing-advancements-in-2024/)
+6. [World Quantum Day 2024: The latest developments in quantum science and technology | Pritzker School of Molecular Engineering | The University of Chicago](https://pme.uchicago.edu/news/world-quantum-day-2024-latest-developments-quantum-science-and-technology)
+7. [Quantum Computing: Potential and Challenges ahead - Plain Concepts](https://www.plainconcepts.com/quantum-computing-potential-challenges/)
+8. [Quantum Technology: Applications and Implications](https://www.csis.org/analysis/quantum-technology-applications-and-implications)
+9. [Quantum computing technology pushes for IT advantage | TechTarget](https://www.techtarget.com/searchcio/feature/Quantum-computing-technology-pushes-for-IT-advantage)
+10. [References](https://www.wevolver.com/article/breakthroughs-in-quantum-computing)
+11. [What's next for quantum computing | MIT Technology Review](https://www.technologyreview.com/2023/01/06/1066317/whats-next-for-quantum-computing/)
+12. [What is quantum computing?](https://www.ibm.com/think/topics/quantum-computing)
