@@ -1,6 +1,14 @@
-# MCP Deep Web Research Server
+# MCP Deep Web Research Server (v0.2.3)
 
-A Model Context Protocol (MCP) server for advanced web research. 
+A Model Context Protocol (MCP) server for advanced web research.
+
+## Latest Changes
+
+- Improved markdown conversion using html-to-md
+  * Better handling of tables, lists, and code blocks
+  * Improved spacing and formatting
+  * Enhanced content readability
+  * Better HTML structure preservation
 
 > This project is a fork of [mcp-webresearch](https://github.com/mzxrai/mcp-webresearch) by [mzxrai](https://github.com/mzxrai), enhanced with additional features for deep web research capabilities. We're grateful to the original creators for their foundational work.
 

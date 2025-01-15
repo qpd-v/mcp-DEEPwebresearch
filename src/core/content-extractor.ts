@@ -1,11 +1,10 @@
 import * as cheerio from 'cheerio';
-import TurndownService from 'turndown';
+import htmlToMd from 'html-to-md';
 import { ExtractedContent, ContentMetadata, ContentSection, ContentExtractionOptions } from '../types/content.js';
 
 type CheerioRoot = ReturnType<typeof cheerio.load>;
 
 export class ContentExtractor {
-    private turndownService: TurndownService;
     private boilerplateSelectors = [
         // Navigation elements
         'nav', 'header', 'footer', 
@@ -41,73 +40,87 @@ export class ContentExtractor {
         '[data-analytics]', '[data-tracking]'
     ];
 
-    constructor() {
-        this.turndownService = new TurndownService({
-            headingStyle: 'atx',
-            codeBlockStyle: 'fenced',
-            emDelimiter: '_',
-            bulletListMarker: '-'
-        });
-
-        // Add custom rules for better content preservation
-        this.setupTurndownRules();
-    }
-
-    private setupTurndownRules(): void {
-        this.turndownService.addRule('preserveLinks', {
-            filter: ['a'],
-            replacement: (content: string, node: any) => {
-                const href = node.getAttribute('href');
-                // Only preserve external links
-                if (href && href.startsWith('http')) {
-                    return `[${content}](${href})`;
+    private htmlToMarkdownOptions = {
+        skipTags: [], // Don't skip any tags by default
+        emDelimiter: '_',
+        bulletListMarker: '-',
+        codeBlockStyle: 'fenced',
+        headingStyle: 'atx',
+        keepReplacement: true,
+        keepHtml: false,
+        listStyle: 'dash',
+        codeStyle: 'fenced',
+        customRules: [
+            // Custom rule for links
+            {
+                selector: 'a',
+                replacement: (content: string, node: any) => {
+                    const href = node.getAttribute('href');
+                    // Only preserve external links
+                    if (href && href.startsWith('http')) {
+                        return `[${content}](${href})`;
+                    }
+                    return content;
                 }
-                return content;
+            },
+            // Custom rule for images
+            {
+                selector: 'img',
+                replacement: (content: string, node: any) => {
+                    const alt = node.getAttribute('alt');
+                    return alt ? `[Image: ${alt}]` : '';
+                }
+            },
+            // Custom rule for tables
+            {
+                selector: 'table',
+                replacement: (content: string, node: any) => {
+                    return this.convertTableToMarkdown(node);
+                }
             }
-        });
-
-        this.turndownService.addRule('preserveTables', {
-            filter: ['table'],
-            replacement: (content: string, node: any) => {
-                return this.convertTableToMarkdown(node);
-            }
-        });
-
-        // Remove images but keep alt text
-        this.turndownService.addRule('images', {
-            filter: ['img'],
-            replacement: (content: string, node: any) => {
-                const alt = node.getAttribute('alt');
-                return alt ? `[Image: ${alt}]` : '';
-            }
-        });
-    }
+        ]
+    };
 
     private convertTableToMarkdown(tableNode: any): string {
         const $ = cheerio.load(tableNode);
         let markdown = '\n';
 
-        // Process headers
-        const headers: string[] = [];
-        $('th').each((_, elem) => {
-            headers.push($(elem).text().trim());
-        });
+        // Get all rows including header row
+        const rows = $('tr').toArray();
+        if (rows.length === 0) return '';
 
-        if (headers.length > 0) {
-            markdown += '| ' + headers.join(' | ') + ' |\n';
-            markdown += '| ' + headers.map(() => '---').join(' | ') + ' |\n';
+        // Get maximum number of columns
+        const maxColumns = Math.max(...rows.map(row => $(row).find('th, td').length));
+        if (maxColumns === 0) return '';
+
+        // Process headers
+        const headerRow = $(rows[0]);
+        const headers: string[] = [];
+        headerRow.find('th, td').each((_, cell) => {
+            headers.push($(cell).text().trim() || ' ');
+        });
+        // Pad headers if needed
+        while (headers.length < maxColumns) {
+            headers.push(' ');
         }
 
-        // Process rows
-        $('tr').each((_, row) => {
+        // Create header row
+        markdown += '| ' + headers.join(' | ') + ' |\n';
+        // Create separator row with proper alignment
+        markdown += '|' + Array(maxColumns).fill(' --- ').join('|') + '|\n';
+
+        // Process data rows (skip first row if it was header)
+        for (let i = headerRow.find('th').length > 0 ? 1 : 0; i < rows.length; i++) {
             const cells: string[] = [];
-            $(row).find('td').each((_, cell) => {
-                cells.push($(cell).text().trim());
+            $(rows[i]).find('td').each((_, cell) => {
+                cells.push($(cell).text().trim() || ' ');
             });
-            if (cells.length > 0) {
-                markdown += '| ' + cells.join(' | ') + ' |\n';
+            // Pad cells if needed
+            while (cells.length < maxColumns) {
+                cells.push(' ');
             }
-        });
+            markdown += '| ' + cells.join(' | ') + ' |\n';
+        }
 
         return markdown + '\n';
     }
@@ -134,10 +147,10 @@ export class ContentExtractor {
             .map(section => section.content)
             .join('\n\n');
 
-        const content = this.turndownService.turndown(mainContent);
+        const content = htmlToMd(mainContent, this.htmlToMarkdownOptions);
 
-        // Clean up the content
-        const cleanedContent = this.cleanContent(content);
+        // Clean up and format the content
+        const cleanedContent = this.cleanContent(this.formatMarkdown(content));
 
         return {
             url,
@@ -326,6 +339,58 @@ export class ContentExtractor {
         });
 
         return structuredData;
+    }
+
+    private formatMarkdown(content: string): string {
+        // First pass: Basic cleanup
+        let formatted = content
+            // Fix list markers
+            .replace(/^\* /gm, '- ')
+            // Add spacing around headers
+            .replace(/^(#{1,6} .+)$/gm, '\n$1\n')
+            // Add spacing around lists
+            .replace(/^(- .+)$/gm, '$1\n');
+
+        // Handle code blocks
+        formatted = formatted.replace(/`([^`]+)`/g, (match, code) => {
+            if (code.includes('\n') || code.includes('function')) {
+                return '\n\n```\n' + code.trim() + '\n```\n\n';
+            }
+            return '`' + code.trim() + '`';
+        });
+
+        // Add spacing between sections
+        formatted = formatted.replace(/^(#{1,6} .*)/gm, '\n\n$1\n');
+
+        // Handle tables - complete rewrite of table structure
+        formatted = formatted.replace(/\|(.*)\|\n/g, (match: string, row: string) => {
+            const cells = row.split('|').map((cell: string) => cell.trim()).filter((cell: string) => cell);
+            if (cells.length === 0) return '';
+
+            // Detect if this is a separator row
+            if (cells.every(cell => /^[-\s]+$/.test(cell))) {
+                return '';  // Skip separator rows, we'll add our own
+            }
+
+            // Check if this is a header row (no separator row seen yet)
+            if (!formatted.includes('| ---')) {
+                const separator = cells.map(() => '---').join(' | ');
+                return '| ' + cells.join(' | ') + ' |\n| ' + separator + ' |\n';
+            }
+
+            return '| ' + cells.join(' | ') + ' |\n';
+        });
+
+        // Final cleanup
+        return formatted
+            // Fix paragraph spacing
+            .replace(/\n{3,}/g, '\n\n')
+            // Ensure sections are properly separated
+            .replace(/(\w)\n(#{1,6} )/g, '$1\n\n$2')
+            // Add proper spacing around code blocks
+            .replace(/```/g, '\n```\n')
+            .replace(/\n{4,}/g, '\n\n\n')
+            .trim();
     }
 
     private truncateContent(content: string, maxLength?: number): string {
