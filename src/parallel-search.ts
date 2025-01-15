@@ -129,21 +129,50 @@ export class ParallelSearch {
             await page.waitForSelector('div.g', { timeout: 10000 });
 
             // Extract results after ensuring they're loaded
-            const results = await page.$$eval('div.g', (elements) => {
-                return elements.map(el => {
+            const results = await page.$$eval('div.g', (elements, query) => {
+                return elements.map((el, index) => {
                     const titleEl = el.querySelector('h3');
                     const linkEl = el.querySelector('a');
                     const snippetEl = el.querySelector('div.VwiC3b');
 
                     if (!titleEl || !linkEl || !snippetEl) return null;
 
+                    const title = titleEl.textContent || '';
+                    const url = linkEl.href || '';
+                    const snippet = snippetEl.textContent || '';
+
+                    // Calculate relevance score based on multiple factors
+                    let relevanceScore = 0;
+
+                    // Position score (earlier results are more relevant)
+                    relevanceScore += Math.max(0, 1 - (index * 0.1));
+
+                    // Title match score
+                    const titleMatchScore = title.toLowerCase().includes(query.toLowerCase()) ? 0.3 : 0;
+                    relevanceScore += titleMatchScore;
+
+                    // Snippet match score
+                    const snippetMatchScore = snippet.toLowerCase().includes(query.toLowerCase()) ? 0.2 : 0;
+                    relevanceScore += snippetMatchScore;
+
+                    // URL quality score
+                    const urlQualityScore =
+                        url.includes('.edu') ? 0.3 :
+                        url.includes('.gov') ? 0.3 :
+                        url.includes('github.com') ? 0.25 :
+                        url.includes('stackoverflow.com') ? 0.25 :
+                        url.includes('docs.') ? 0.25 :
+                        0.1;
+                    relevanceScore += urlQualityScore;
+
                     return {
-                        title: titleEl.textContent || '',
-                        url: linkEl.href || '',
-                        snippet: snippetEl.textContent || ''
+                        title,
+                        url,
+                        snippet,
+                        relevanceScore: Math.min(1, relevanceScore)
                     };
                 }).filter(result => result !== null);
-            });
+            }, query);
 
             if (!results || results.length === 0) {
                 throw new Error('No search results found');

@@ -22,7 +22,7 @@ export interface ContentSection {
     title?: string;
     content: string;
     importance: number;
-    type: 'main' | 'sidebar' | 'header' | 'footer' | 'navigation' | 'other';
+    type: 'main' | 'technical' | 'sidebar' | 'header' | 'footer' | 'navigation' | 'other';
 }
 
 export interface StructuredContent {

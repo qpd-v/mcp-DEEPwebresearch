@@ -7,20 +7,54 @@ export class ContentAnalyzer {
     private tfidf: natural.TfIdf;
     private stemmer: typeof natural.PorterStemmerFr;
     private technicalTerms: Set<string>;
+    private boilerplatePatterns: RegExp[];
     
     constructor() {
         this.tokenizer = new natural.WordTokenizer();
         this.tfidf = new natural.TfIdf();
         this.stemmer = natural.PorterStemmerFr;
         
-        // Initialize common technical terms
+        // Initialize technical terms focused on API wrappers and programming
         this.technicalTerms = new Set([
-            'algorithm', 'encryption', 'cryptography', 'quantum', 'standard',
-            'protocol', 'security', 'implementation', 'parameter', 'mechanism',
-            'authentication', 'signature', 'verification', 'validation', 'key',
-            'public', 'private', 'symmetric', 'asymmetric', 'cipher',
-            'hash', 'digital', 'certificate', 'computation', 'lattice'
+            // API and Design Patterns
+            'api', 'wrapper', 'client', 'sdk', 'library', 'interface',
+            'endpoint', 'request', 'response', 'http', 'rest', 'soap',
+            'facade', 'adapter', 'proxy', 'decorator', 'factory',
+            
+            // Implementation Concepts
+            'implementation', 'method', 'function', 'class', 'object',
+            'parameter', 'argument', 'return', 'async', 'await', 'promise',
+            'callback', 'error', 'exception', 'handler', 'middleware',
+            
+            // Best Practices
+            'pattern', 'practice', 'standard', 'convention', 'principle',
+            'solid', 'dry', 'separation', 'concern', 'abstraction',
+            'encapsulation', 'inheritance', 'polymorphism',
+            
+            // Testing and Quality
+            'test', 'mock', 'stub', 'assertion', 'coverage', 'unit',
+            'integration', 'validation', 'verification', 'documentation',
+            
+            // Common Features
+            'authentication', 'authorization', 'security', 'cache',
+            'rate', 'limit', 'throttle', 'retry', 'timeout', 'logging'
         ]);
+
+        // Initialize boilerplate patterns
+        this.boilerplatePatterns = [
+            /copyright/i,
+            /all rights reserved/i,
+            /terms of service/i,
+            /privacy policy/i,
+            /cookie policy/i,
+            /contact us/i,
+            /about us/i,
+            /follow us/i,
+            /subscribe/i,
+            /sign up/i,
+            /log in/i,
+            /register/i
+        ];
     }
 
     public async analyze(content: ExtractedContent, options: AnalysisOptions = {}): Promise<ContentAnalysis> {
@@ -56,40 +90,103 @@ export class ContentAnalyzer {
     }
 
     private async extractTopics(content: ExtractedContent, options: AnalysisOptions): Promise<Topic[]> {
-        const maxTopics = options.maxTopics || 5;
-        const minConfidence = options.minConfidence || 0.3;
+        const maxTopics = options.maxTopics || 8;
+        const minConfidence = options.minConfidence || 0.15; // Lowered threshold
 
-        // Get important terms using TF-IDF
-        const terms = this.getImportantTerms(content.content);
+        // Split content into sections
+        const sections = content.content.split(/\n\n+/);
         
-        // Group related terms into topics
-        const topics: Topic[] = [];
-        const processedTerms = new Set<string>();
+        // Initialize topic tracking
+        const topicMentions = new Map<string, {
+            count: number,
+            contexts: string[],
+            keywords: Set<string>
+        }>();
 
-        for (const term of terms) {
-            if (processedTerms.has(term.term)) continue;
+        // Analyze each section
+        sections.forEach(section => {
+            const sectionLower = section.toLowerCase();
             
-            const relatedTerms = terms.filter(t => 
-                this.areTermsRelated(term.term, t.term) && 
-                !processedTerms.has(t.term)
-            );
+            // Look for topic indicators
+            const topicIndicators = [
+                { pattern: /(?:using|implementing|creating)\s+(\w+(?:\s+\w+){0,2})\s+(?:pattern|approach|method)/i, weight: 1.2 },
+                { pattern: /(?:best\s+practice|recommended)\s+(?:is|for)\s+(\w+(?:\s+\w+){0,2})/i, weight: 1.1 },
+                { pattern: /(\w+(?:\s+\w+){0,2})\s+implementation/i, weight: 1.0 },
+                { pattern: /(\w+(?:\s+\w+){0,2})\s+(?:wrapper|api|interface)/i, weight: 1.0 }
+            ];
 
-            if (relatedTerms.length > 0) {
-                const topic: Topic = {
-                    name: this.selectTopicName(term.term, relatedTerms.map(t => t.term)),
-                    confidence: term.score,
-                    keywords: [term.term, ...relatedTerms.map(t => t.term)]
-                };
+            topicIndicators.forEach(({ pattern, weight }) => {
+                const matches = sectionLower.match(pattern);
+                if (matches && matches[1]) {
+                    const topic = matches[1].trim();
+                    const existing = topicMentions.get(topic) || { count: 0, contexts: [], keywords: new Set() };
+                    existing.count += weight;
+                    existing.contexts.push(section);
+                    
+                    // Extract related keywords
+                    const keywords = this.extractKeywords(section);
+                    keywords.forEach(k => existing.keywords.add(k));
+                    
+                    topicMentions.set(topic, existing);
+                }
+            });
 
-                topics.push(topic);
-                processedTerms.add(term.term);
-                relatedTerms.forEach(t => processedTerms.add(t.term));
+            // Look for code examples
+            if (section.includes('```') || section.includes('`')) {
+                const codeKeywords = this.extractCodeKeywords(section);
+                codeKeywords.forEach(keyword => {
+                    const existing = topicMentions.get(keyword) || { count: 0, contexts: [], keywords: new Set() };
+                    existing.count += 0.5;
+                    existing.contexts.push(section);
+                    topicMentions.set(keyword, existing);
+                });
             }
+        });
 
-            if (topics.length >= maxTopics) break;
-        }
+        // Convert to topics
+        const topics: Topic[] = Array.from(topicMentions.entries())
+            .map(([name, data]) => ({
+                name,
+                confidence: Math.min(1, data.count / 3),
+                keywords: Array.from(data.keywords)
+            }))
+            .filter(topic => topic.confidence >= minConfidence)
+            .sort((a, b) => b.confidence - a.confidence)
+            .slice(0, maxTopics);
 
-        return topics.filter(topic => topic.confidence >= minConfidence);
+        return topics;
+    }
+
+    private extractKeywords(text: string): string[] {
+        const words = text.toLowerCase().split(/\W+/);
+        return words.filter(word =>
+            word.length > 3 &&
+            this.technicalTerms.has(word) &&
+            !this.isStopWord(word)
+        );
+    }
+
+    private extractCodeKeywords(text: string): string[] {
+        const codePatterns = [
+            /class\s+(\w+)/g,
+            /function\s+(\w+)/g,
+            /method\s+(\w+)/g,
+            /interface\s+(\w+)/g,
+            /import\s+(\w+)/g,
+            /require\s+['"](.+?)['"]/g
+        ];
+
+        const keywords = new Set<string>();
+        codePatterns.forEach(pattern => {
+            let match;
+            while ((match = pattern.exec(text)) !== null) {
+                if (match[1]) {
+                    keywords.add(match[1].toLowerCase());
+                }
+            }
+        });
+
+        return Array.from(keywords);
     }
 
     private getImportantTerms(text: string): Array<{term: string; score: number}> {
@@ -156,13 +253,13 @@ export class ContentAnalyzer {
     private areTopicsRelated(topic1: Topic, topic2: Topic): boolean {
         // Check if topics often appear together in technical contexts
         const technicalPairs = [
-            ['key', 'encryption'],
-            ['key', 'cryptography'],
-            ['quantum', 'cryptography'],
-            ['quantum', 'security'],
-            ['encryption', 'security'],
-            ['standard', 'implementation'],
-            ['algorithm', 'implementation']
+            ['api', 'wrapper'],
+            ['wrapper', 'implementation'],
+            ['pattern', 'practice'],
+            ['method', 'interface'],
+            ['class', 'object'],
+            ['error', 'handling'],
+            ['authentication', 'security']
         ];
 
         return technicalPairs.some(([t1, t2]) => 
@@ -193,13 +290,13 @@ export class ContentAnalyzer {
         
         // Check technical term relationships
         const technicalPairs = [
-            ['key', 'encryption'],
-            ['key', 'cryptography'],
-            ['quantum', 'cryptography'],
-            ['quantum', 'security'],
-            ['encryption', 'security'],
-            ['standard', 'implementation'],
-            ['algorithm', 'implementation']
+            ['api', 'wrapper'],
+            ['wrapper', 'implementation'],
+            ['pattern', 'practice'],
+            ['method', 'interface'],
+            ['class', 'object'],
+            ['error', 'handling'],
+            ['authentication', 'security']
         ];
 
         return technicalPairs.some(([t1, t2]) => 
@@ -222,28 +319,139 @@ export class ContentAnalyzer {
     }
 
     private extractKeyPoints(content: ExtractedContent, topics: Topic[], options: AnalysisOptions): KeyPoint[] {
-        // Split content into sentences
-        const sentences = content.content.split(/[.!?]+/).map(s => s.trim()).filter(s => s.length > 0);
+        // Split content into paragraphs first
+        const paragraphs = content.content.split(/\n\n+/);
         const keyPoints: KeyPoint[] = [];
-        const minImportance = options.minImportance || 0.5;
+        const minImportance = options.minImportance || 0.25; // Lowered threshold
 
-        for (const sentence of sentences) {
-            const importance = this.calculateSentenceImportance(sentence, topics);
-            if (importance >= minImportance) {
-                const relatedTopics = this.findRelatedTopics(sentence, topics);
-                keyPoints.push({
-                    text: sentence.trim(),
-                    importance,
-                    topics: relatedTopics,
-                    supportingEvidence: this.findSupportingEvidence(sentence, content)
+        // First pass: identify best practice and implementation sections
+        const bestPracticeSections = paragraphs.filter(p => 
+            /best\s+practices?|recommended|should|must|guidelines?/i.test(p)
+        );
+        const implementationSections = paragraphs.filter(p => 
+            /implementation|example|usage|how\s+to|approach/i.test(p) ||
+            p.includes('```') || 
+            /\b(function|class|method|interface)\b/.test(p)
+        );
+
+        // Process best practice sections
+        bestPracticeSections.forEach(section => {
+            const sentences = section.split(/[.!?]+/).map(s => s.trim()).filter(s => s.length > 20);
+            sentences.forEach(sentence => {
+                if (this.isBestPracticeStatement(sentence)) {
+                    const importance = this.calculateSentenceImportance(sentence, topics) * 1.3; // Boost best practices
+                    if (importance >= minImportance) {
+                        keyPoints.push({
+                            text: sentence.trim(),
+                            importance,
+                            topics: this.findRelatedTopics(sentence, topics),
+                            supportingEvidence: this.findSupportingEvidence(sentence, content)
+                        });
+                    }
+                }
+            });
+        });
+
+        // Process implementation sections
+        implementationSections.forEach(section => {
+            const sentences = section.split(/[.!?]+/).map(s => s.trim()).filter(s => s.length > 20);
+            sentences.forEach(sentence => {
+                if (this.isImplementationGuidance(sentence)) {
+                    const importance = this.calculateSentenceImportance(sentence, topics) * 1.2; // Boost implementation guidance
+                    if (importance >= minImportance) {
+                        const evidence = [
+                            ...this.findSupportingEvidence(sentence, content),
+                            ...this.extractCodeExamples(section)
+                        ];
+                        keyPoints.push({
+                            text: sentence.trim(),
+                            importance,
+                            topics: this.findRelatedTopics(sentence, topics),
+                            supportingEvidence: evidence
+                        });
+                    }
+                }
+            });
+        });
+
+        // Process remaining paragraphs for other insights
+        paragraphs.forEach(paragraph => {
+            if (!bestPracticeSections.includes(paragraph) && !implementationSections.includes(paragraph)) {
+                const sentences = paragraph.split(/[.!?]+/).map(s => s.trim()).filter(s => s.length > 20);
+                sentences.forEach(sentence => {
+                    const importance = this.calculateSentenceImportance(sentence, topics);
+                    if (importance >= minImportance && this.isInsightful(sentence)) {
+                        keyPoints.push({
+                            text: sentence.trim(),
+                            importance,
+                            topics: this.findRelatedTopics(sentence, topics),
+                            supportingEvidence: this.findSupportingEvidence(sentence, content)
+                        });
+                    }
                 });
             }
-        }
+        });
 
         return this.deduplicateKeyPoints(
             keyPoints.sort((a, b) => b.importance - a.importance)
-                .slice(0, options.maxKeyPoints || 10)
+                .slice(0, options.maxKeyPoints || 15)
         );
+    }
+
+    private isBestPracticeStatement(sentence: string): boolean {
+        const bestPracticeIndicators = [
+            /\b(?:should|must|recommend|best|practice|important|key|essential|avoid|ensure)\b/i,
+            /\b(?:pattern|approach|strategy|technique|principle)\b/i,
+            /\b(?:better|improve|optimize|enhance)\b/i,
+            /\b(?:common|typical|standard|conventional)\b/i
+        ];
+
+        const lowerSentence = sentence.toLowerCase();
+        return bestPracticeIndicators.some(pattern => pattern.test(lowerSentence)) &&
+               !this.isBoilerplate(sentence);
+    }
+
+    private isImplementationGuidance(sentence: string): boolean {
+        const implementationIndicators = [
+            /\b(?:implement|create|build|develop|use|initialize|configure)\b/i,
+            /\b(?:method|function|class|interface|object)\b/i,
+            /\b(?:parameter|argument|return|value|type)\b/i,
+            /\b(?:example|sample|demo|code)\b/i
+        ];
+
+        const lowerSentence = sentence.toLowerCase();
+        return implementationIndicators.some(pattern => pattern.test(lowerSentence)) &&
+               !this.isBoilerplate(sentence);
+    }
+
+    private isInsightful(sentence: string): boolean {
+        // Check if sentence contains meaningful technical content
+        const technicalTermCount = this.tokenizeContent(sentence)
+            .filter(token => this.technicalTerms.has(token)).length;
+        
+        return technicalTermCount >= 2 && // Has multiple technical terms
+               sentence.length > 30 &&     // Not too short
+               !this.isBoilerplate(sentence) &&
+               !/^\s*[^a-zA-Z]*\s*$/.test(sentence); // Contains actual words
+    }
+
+    private extractCodeExamples(text: string): string[] {
+        const examples: string[] = [];
+        
+        // Extract code blocks
+        const codeBlockRegex = /```[\s\S]*?```/g;
+        let match;
+        while ((match = codeBlockRegex.exec(text)) !== null) {
+            examples.push(match[0]);
+        }
+        
+        // Extract inline code
+        const inlineCodeRegex = /`[^`]+`/g;
+        while ((match = inlineCodeRegex.exec(text)) !== null) {
+            examples.push(match[0]);
+        }
+        
+        return examples;
     }
 
     private deduplicateKeyPoints(keyPoints: KeyPoint[]): KeyPoint[] {
@@ -288,28 +496,68 @@ export class ContentAnalyzer {
         const tokens = this.tokenizeContent(sentence);
         let importance = 0;
         let technicalTermCount = 0;
+        let hasCodeExample = false;
 
-        // Count technical terms
+        // Check for code-like content
+        hasCodeExample = sentence.includes('```') ||
+                        sentence.includes('`') ||
+                        /\b(function|class|const|let|var|import|export)\b/.test(sentence);
+
+        // Count technical terms with weighted categories
+        const termWeights = {
+            implementation: 1.2,  // Implementation details
+            pattern: 1.2,        // Design patterns
+            practice: 1.2,       // Best practices
+            test: 1.1,          // Testing related
+            error: 1.1,         // Error handling
+            api: 1.3,           // API specific
+            wrapper: 1.3,       // Wrapper specific
+            method: 1.1,        // Method related
+            class: 1.1          // Class related
+        };
+
         tokens.forEach(token => {
             if (this.technicalTerms.has(token)) {
                 technicalTermCount++;
+                // Apply additional weight for key terms
+                for (const [term, weight] of Object.entries(termWeights)) {
+                    if (token.includes(term)) {
+                        importance += weight - 1; // Add the extra weight
+                    }
+                }
             }
         });
 
-        // Calculate topic relevance
+        // Calculate topic relevance with reduced penalty for multiple topics
         topics.forEach(topic => {
             topic.keywords.forEach(keyword => {
                 if (tokens.includes(keyword.toLowerCase())) {
-                    importance += topic.confidence;
+                    importance += topic.confidence * 0.8; // Reduced weight per topic
                 }
             });
         });
 
         // Boost importance based on technical term density
         const technicalDensity = technicalTermCount / tokens.length;
-        importance *= (1 + technicalDensity);
+        importance += technicalDensity * 0.5; // Reduced multiplier
 
-        return Math.min(importance / (topics.length || 1), 1);
+        // Boost for code examples
+        if (hasCodeExample) {
+            importance += 0.3;
+        }
+
+        // Boost for sentences that look like best practices or implementation guidance
+        if (
+            sentence.toLowerCase().includes('should') ||
+            sentence.toLowerCase().includes('best practice') ||
+            sentence.toLowerCase().includes('recommend') ||
+            sentence.toLowerCase().includes('pattern') ||
+            sentence.toLowerCase().includes('example')
+        ) {
+            importance += 0.2;
+        }
+
+        return Math.min(importance, 1);
     }
 
     private findRelatedTopics(sentence: string, topics: Topic[]): string[] {
@@ -591,5 +839,9 @@ export class ContentAnalyzer {
             (quality.technicalDepth * 0.2) + 
             (quality.informationDensity * 0.2)
         );
+    }
+
+    private isBoilerplate(text: string): boolean {
+        return this.boilerplatePatterns.some(pattern => pattern.test(text));
     }
 }

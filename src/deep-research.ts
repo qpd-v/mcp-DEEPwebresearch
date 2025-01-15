@@ -1,6 +1,7 @@
 import { ResearchSession } from './core/research-session.js';
 import { ParallelSearch } from './parallel-search.js';
 import { SearchQueue } from './search-queue.js';
+import { SearchResult } from './types/session.js';
 
 export interface DeepResearchOptions {
     maxDepth?: number;
@@ -53,6 +54,33 @@ export class DeepResearch {
         this.activeSessions = new Map();
     }
 
+    private deduplicateResults(results: SearchResult[]): SearchResult[] {
+        const seen = new Set<string>();
+        return results.filter(result => {
+            const normalizedUrl = this.normalizeUrl(result.url);
+            if (seen.has(normalizedUrl)) {
+                return false;
+            }
+            seen.add(normalizedUrl);
+            return true;
+        });
+    }
+
+    private normalizeUrl(url: string): string {
+        try {
+            // Remove protocol, www, trailing slashes, and query parameters
+            return url
+                .replace(/^https?:\/\//, '')
+                .replace(/^www\./, '')
+                .replace(/\/$/, '')
+                .split('?')[0]
+                .split('#')[0]
+                .toLowerCase();
+        } catch (error) {
+            return url.toLowerCase();
+        }
+    }
+
     public async startResearch(topic: string, options: DeepResearchOptions = {}): Promise<ResearchResult> {
         // Create new research session
         const session = new ResearchSession(topic, {
@@ -66,21 +94,30 @@ export class DeepResearch {
         this.activeSessions.set(session.id, session);
 
         try {
-            // Perform initial search
+            // Perform initial search with more targeted queries
             const searchResults = await this.parallelSearch.parallelSearch([
                 topic,
-                `${topic} overview`,
-                `${topic} analysis`,
-                `${topic} research`
+                `${topic} tutorial`,
+                `${topic} guide`,
+                `${topic} example`,
+                `${topic} implementation`,
+                `${topic} code`,
+                `${topic} design pattern`,
+                `${topic} best practice`
             ]);
 
-            // Process each search result
-            const processPromises = searchResults.results.flatMap(result =>
-                result.results.map(r => session.processUrl(r.url))
-            );
+            // Filter and sort results by relevance
+            const allResults = searchResults.results.flatMap(result => result.results);
+            const uniqueResults = this.deduplicateResults(allResults);
+            const sortedResults = uniqueResults.sort((a, b) => b.relevanceScore - a.relevanceScore);
 
-            // Wait for initial processing to complete
-            await Promise.all(processPromises);
+            // Process top results first
+            const topResults = sortedResults.slice(0, 5);
+            await Promise.all(topResults.map(r => session.processUrl(r.url)));
+
+            // Process remaining results
+            const remainingResults = sortedResults.slice(5);
+            await Promise.all(remainingResults.map(r => session.processUrl(r.url)));
 
             // Complete the session
             await session.complete();

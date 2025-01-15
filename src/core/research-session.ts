@@ -1,4 +1,4 @@
-import { ResearchSession as IResearchSession, ResearchPlan, ResearchStep, ResearchProgress, ResearchFindings, StepResult, SessionOptions } from '../types/session.js';
+import { ResearchSession as IResearchSession, ResearchPlan, ResearchStep, ResearchProgress, ResearchFindings, StepResult, SessionOptions, Evidence } from '../types/session.js';
 import { ContentExtractor } from './content-extractor.js';
 import { ContentAnalyzer } from './content-analyzer.js';
 import { ExtractedContent } from '../types/content.js';
@@ -106,6 +106,50 @@ export class ResearchSession implements IResearchSession {
             // Wait for content to load
             await page.waitForLoadState('domcontentloaded');
 
+            // Wait for dynamic content
+            await page.waitForTimeout(2000); // Allow time for dynamic content to load
+
+            // Wait for specific technical content selectors
+            const technicalSelectors = [
+                'pre', 'code',
+                '.technical-content',
+                '.documentation',
+                '.markdown-body',
+                '.post-content',
+                'article'
+            ];
+
+            for (const selector of technicalSelectors) {
+                try {
+                    await page.waitForSelector(selector, { timeout: 5000 });
+                } catch (e) {
+                    // Ignore if selector not found
+                }
+            }
+
+            // Expand any "show more" or similar buttons
+            const expandButtons = [
+                'button:has-text("show more")',
+                'button:has-text("read more")',
+                'button:has-text("expand")',
+                '.expand-button',
+                '.show-more'
+            ];
+
+            for (const buttonSelector of expandButtons) {
+                try {
+                    const buttons = await page.$$(buttonSelector);
+                    for (const button of buttons) {
+                        await button.click().catch(() => {}); // Ignore click errors
+                    }
+                } catch (e) {
+                    // Ignore if no buttons found
+                }
+            }
+
+            // Wait a bit for any expanded content
+            await page.waitForTimeout(1000);
+
             // Get the full HTML content
             const html = await page.content();
             return html;
@@ -183,30 +227,91 @@ export class ResearchSession implements IResearchSession {
     }
 
     private async processFindings(content: ExtractedContent, analysis: ContentAnalysis, depth: number): Promise<void> {
-        // Update main topics
-        this.updateTopics(analysis);
+        try {
+            // Extract code blocks and technical sections first
+            const codeBlocks = this.extractCodeBlocks(content.content);
+            const technicalSections = this.extractTechnicalSections(content.content);
 
-        // Update key insights
-        this.updateInsights(analysis);
+            // Update main topics with higher weight for technical content
+            this.updateTopics(analysis, technicalSections);
 
-        // Update sources
-        this.updateSources(content, analysis);
+            // Update key insights with code examples
+            this.updateInsights(analysis, codeBlocks, technicalSections);
 
-        // Process related URLs if within depth limit
-        if (depth < this.options.maxDepth) {
-            await this.processRelatedUrls(content, depth + 1);
+            // Update sources with technical content score
+            this.updateSources(content, analysis, technicalSections.length > 0);
+
+            // Process related URLs if within depth limit
+            if (depth < this.options.maxDepth) {
+                await this.processRelatedUrls(content, depth + 1);
+            }
+        } catch (error) {
+            console.error('Error processing findings:', error);
         }
     }
 
-    private updateTopics(analysis: ContentAnalysis): void {
+    private extractCodeBlocks(content: string): string[] {
+        const blocks: string[] = [];
+        // Match both fenced code blocks and inline code
+        const codeRegex = /```[\s\S]*?```|`[^`]+`/g;
+        let match;
+        
+        while ((match = codeRegex.exec(content)) !== null) {
+            blocks.push(match[0]);
+        }
+        
+        return blocks;
+    }
+
+    private extractTechnicalSections(content: string): string[] {
+        const sections: string[] = [];
+        const technicalIndicators = [
+            'implementation',
+            'example',
+            'usage',
+            'code',
+            'method',
+            'function',
+            'class',
+            'pattern',
+            'practice'
+        ];
+
+        // Split content into paragraphs
+        const paragraphs = content.split(/\n\n+/);
+        
+        // Find paragraphs containing technical content
+        paragraphs.forEach(paragraph => {
+            const lowerParagraph = paragraph.toLowerCase();
+            if (
+                technicalIndicators.some(indicator => lowerParagraph.includes(indicator)) ||
+                paragraph.includes('```') ||
+                /`[^`]+`/.test(paragraph)
+            ) {
+                sections.push(paragraph);
+            }
+        });
+
+        return sections;
+    }
+
+    private updateTopics(analysis: ContentAnalysis, technicalSections: string[]): void {
         analysis.topics.forEach(topic => {
             const existingTopic = this.findings.mainTopics.find(t => t.name === topic.name);
+            const hasTechnicalContent = technicalSections.some(section =>
+                section.toLowerCase().includes(topic.name.toLowerCase())
+            );
+
+            const adjustedConfidence = hasTechnicalContent ?
+                Math.min(1, topic.confidence * 1.3) :
+                topic.confidence;
+
             if (existingTopic) {
-                existingTopic.importance = Math.max(existingTopic.importance, topic.confidence);
+                existingTopic.importance = Math.max(existingTopic.importance, adjustedConfidence);
             } else {
                 this.findings.mainTopics.push({
                     name: topic.name,
-                    importance: topic.confidence,
+                    importance: adjustedConfidence,
                     relatedTopics: [],
                     evidence: []
                 });
@@ -217,13 +322,42 @@ export class ResearchSession implements IResearchSession {
         this.findings.mainTopics.sort((a, b) => b.importance - a.importance);
     }
 
-    private updateInsights(analysis: ContentAnalysis): void {
+    private updateInsights(analysis: ContentAnalysis, codeBlocks: string[], technicalSections: string[]): void {
         analysis.keyPoints.forEach(point => {
-            if (point.importance >= this.options.minRelevanceScore) {
+            // Find related code examples
+            const relatedCode = codeBlocks.filter(code =>
+                this.isCodeRelatedToPoint(code, point.text)
+            );
+
+            // Find related technical sections
+            const relatedTechnical = technicalSections.filter(section =>
+                this.isSectionRelatedToPoint(section, point.text)
+            );
+
+            // Adjust confidence based on technical content
+            let adjustedConfidence = point.importance;
+            if (relatedCode.length > 0) adjustedConfidence *= 1.2;
+            if (relatedTechnical.length > 0) adjustedConfidence *= 1.1;
+
+            if (adjustedConfidence >= this.options.minRelevanceScore) {
+                // Convert code blocks and technical sections to Evidence objects
+                const evidence: Evidence[] = [
+                    ...relatedCode.map(code => ({
+                        claim: "Code example supporting the insight",
+                        sources: [code],
+                        confidence: 0.9
+                    })),
+                    ...relatedTechnical.map(section => ({
+                        claim: "Technical documentation supporting the insight",
+                        sources: [section],
+                        confidence: 0.8
+                    }))
+                ];
+
                 this.findings.keyInsights.push({
                     text: point.text,
-                    confidence: point.importance,
-                    supportingEvidence: [],
+                    confidence: Math.min(1, adjustedConfidence),
+                    supportingEvidence: evidence,
                     relatedTopics: point.topics
                 });
             }
@@ -233,11 +367,13 @@ export class ResearchSession implements IResearchSession {
         this.findings.keyInsights.sort((a, b) => b.confidence - a.confidence);
     }
 
-    private updateSources(content: ExtractedContent, analysis: ContentAnalysis): void {
+    private updateSources(content: ExtractedContent, analysis: ContentAnalysis, hasTechnicalContent: boolean): void {
         const source = {
             url: content.url,
             title: content.title,
-            credibilityScore: analysis.quality.credibilityScore,
+            credibilityScore: hasTechnicalContent ?
+                Math.min(1, analysis.quality.credibilityScore * 1.2) :
+                analysis.quality.credibilityScore,
             contributedFindings: analysis.keyPoints.map(point => point.text)
         };
 
@@ -245,6 +381,29 @@ export class ResearchSession implements IResearchSession {
         if (!existingSource) {
             this.findings.sources.push(source);
         }
+    }
+
+    private isCodeRelatedToPoint(code: string, point: string): boolean {
+        const codeTerms = new Set(code.toLowerCase().split(/\W+/));
+        const pointTerms = new Set(point.toLowerCase().split(/\W+/));
+        
+        // Check for common terms
+        const intersection = [...pointTerms].filter(term => codeTerms.has(term));
+        return intersection.length >= 2; // At least 2 common terms
+    }
+
+    private isSectionRelatedToPoint(section: string, point: string): boolean {
+        const sectionLower = section.toLowerCase();
+        const pointLower = point.toLowerCase();
+        
+        // Check for significant term overlap
+        const sectionTerms = new Set(sectionLower.split(/\W+/));
+        const pointTerms = new Set(pointLower.split(/\W+/));
+        const intersection = [...pointTerms].filter(term => sectionTerms.has(term));
+        
+        return intersection.length >= 3 || // At least 3 common terms
+               sectionLower.includes(pointLower) || // Contains the entire point
+               pointLower.includes(sectionLower); // Point contains the section
     }
 
     private async processRelatedUrls(content: ExtractedContent, depth: number): Promise<void> {

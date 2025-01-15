@@ -2,12 +2,7 @@ export interface SearchResult {
     title: string;
     url: string;
     snippet: string;
-}
-
-export interface SearchResult {
-    title: string;
-    url: string;
-    snippet: string;
+    relevanceScore: number;
 }
 
 export interface ParallelSearchResult {
