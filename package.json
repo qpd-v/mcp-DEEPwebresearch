@@ -25,17 +25,16 @@
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.1.1",
     "cheerio": "^1.0.0",
+    "html-to-md": "^0.8.6",
     "natural": "^8.0.0",
     "playwright": "^1.40.0",
     "rate-limiter-flexible": "^5.0.0",
-    "readability": "^0.1.0",
-    "turndown": "^7.1.2"
+    "readability": "^0.1.0"
   },
   "devDependencies": {
     "@types/cheerio": "^0.22.35",
     "@types/jest": "^29.5.0",
     "@types/node": "^20.0.0",
-    "@types/turndown": "^5.0.4",
     "@typescript-eslint/eslint-plugin": "^6.0.0",
     "@typescript-eslint/parser": "^6.0.0",
     "eslint": "^8.0.0",
