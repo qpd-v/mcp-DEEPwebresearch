@@ -40,6 +40,13 @@ export interface ResearchResult {
         started: string;
         completed?: string;
         duration?: number;
+        operations?: {
+            parallelSearch?: number;
+            deduplication?: number;
+            topResultsProcessing?: number;
+            remainingResultsProcessing?: number;
+            total?: number;
+        };
     };
 }
 
@@ -82,8 +89,11 @@ export class DeepResearch {
     }
 
     public async startResearch(topic: string, options: DeepResearchOptions = {}): Promise<ResearchResult> {
-        console.log('Starting research for topic:', topic);
-        console.log('Options:', options);
+        const startTime = Date.now();
+        const timings: { [key: string]: number } = {};
+
+        console.log('[Performance] Starting research for topic:', topic);
+        console.log('[Performance] Options:', options);
 
         // Create new research session
         const session = new ResearchSession(topic, {
@@ -94,11 +104,13 @@ export class DeepResearch {
             maxParallelOperations: options.maxParallelOperations
         });
 
-        console.log('Created research session:', session.id);
+        console.log('[Performance] Created research session:', session.id);
         this.activeSessions.set(session.id, session);
 
         try {
-            console.log('Performing initial parallel search...');
+            console.log('[Performance] Starting parallel search...');
+            const parallelSearchStart = Date.now();
+            
             const queries = [
                 topic,
                 `${topic} tutorial`,
@@ -109,53 +121,69 @@ export class DeepResearch {
                 `${topic} design pattern`,
                 `${topic} best practice`
             ];
-            console.log('Search queries:', queries);
+            console.log('[Performance] Search queries:', queries);
 
             const searchResults = await this.parallelSearch.parallelSearch(queries);
-            console.log('Parallel search complete. Results:', searchResults.results.length);
+            timings.parallelSearch = Date.now() - parallelSearchStart;
+            console.log('[Performance] Parallel search complete. Duration:', timings.parallelSearch, 'ms');
 
-            // Filter and sort results by relevance
+            const deduplicationStart = Date.now();
             const allResults = searchResults.results.flatMap(result => result.results);
-            console.log('Total results:', allResults.length);
+            console.log('[Performance] Total results:', allResults.length);
 
             const uniqueResults = this.deduplicateResults(allResults);
-            console.log('Unique results:', uniqueResults.length);
+            console.log('[Performance] Unique results:', uniqueResults.length);
 
             const sortedResults = uniqueResults.sort((a, b) => b.relevanceScore - a.relevanceScore);
-            console.log('Results sorted by relevance');
+            timings.deduplication = Date.now() - deduplicationStart;
+            console.log('[Performance] Deduplication complete. Duration:', timings.deduplication, 'ms');
 
             // Process top results first
-            console.log('Processing top 5 results...');
+            console.log('[Performance] Processing top 5 results...');
+            const topProcessingStart = Date.now();
             const topResults = sortedResults.slice(0, 5);
             await Promise.all(topResults.map(r => {
-                console.log('Processing URL:', r.url);
+                console.log('[Performance] Processing URL:', r.url);
                 return session.processUrl(r.url);
             }));
+            timings.topResultsProcessing = Date.now() - topProcessingStart;
+            console.log('[Performance] Top results processing complete. Duration:', timings.topResultsProcessing, 'ms');
 
             // Process remaining results
-            console.log('Processing remaining results...');
+            console.log('[Performance] Processing remaining results...');
+            const remainingProcessingStart = Date.now();
             const remainingResults = sortedResults.slice(5);
             await Promise.all(remainingResults.map(r => {
-                console.log('Processing URL:', r.url);
+                console.log('[Performance] Processing URL:', r.url);
                 return session.processUrl(r.url);
             }));
+            timings.remainingResultsProcessing = Date.now() - remainingProcessingStart;
+            console.log('[Performance] Remaining results processing complete. Duration:', timings.remainingResultsProcessing, 'ms');
 
             // Complete the session
-            console.log('Completing session...');
+            console.log('[Performance] Completing session...');
             await session.complete();
 
             // Format and return results
-            console.log('Formatting results...');
+            console.log('[Performance] Formatting results...');
             const results = this.formatResults(session);
-            console.log('Research complete. Found:', {
-                mainTopics: results.findings.mainTopics.length,
-                keyInsights: results.findings.keyInsights.length,
-                sources: results.findings.sources.length
-            });
+            
+            // Add timing information
+            timings.total = Date.now() - startTime;
+            results.timing.operations = {
+                parallelSearch: timings.parallelSearch,
+                deduplication: timings.deduplication,
+                topResultsProcessing: timings.topResultsProcessing,
+                remainingResultsProcessing: timings.remainingResultsProcessing,
+                total: timings.total
+            };
+
+            console.log('[Performance] Research complete. Total duration:', timings.total, 'ms');
+            console.log('[Performance] Operation timings:', timings);
 
             return results;
         } catch (error) {
-            console.error(`Error in research session ${session.id}:`, error);
+            console.error(`[Performance] Error in research session ${session.id}:`, error);
             throw error;
         } finally {
             // Cleanup

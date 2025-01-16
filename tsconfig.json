@@ -5,7 +5,7 @@
     "moduleResolution": "node",
     "lib": ["ES2020", "DOM"],
     "outDir": "./dist",
-    "rootDir": ".",
+    "rootDir": "./src",
     "strict": true,
     "esModuleInterop": true,
     "skipLibCheck": true,
@@ -25,8 +25,7 @@
     "emitDecoratorMetadata": true
   },
   "include": [
-    "src/**/*",
-    "test.ts"
+    "src/**/*"
   ],
   "exclude": [
     "node_modules",

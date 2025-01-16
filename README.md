@@ -1,4 +1,4 @@
-# MCP Deep Web Research Server (v0.2.7)
+# MCP Deep Web Research Server (v0.2.8)
 
 [![Node.js Version](https://img.shields.io/badge/node-%3E%3D18-brightgreen.svg)](https://nodejs.org/)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.0-blue.svg)](https://www.typescriptlang.org/)
@@ -8,11 +8,11 @@ A Model Context Protocol (MCP) server for advanced web research.
 
 ## Latest Changes
 
-- Improved markdown conversion using html-to-md
-  * Better handling of tables, lists, and code blocks
-  * Improved spacing and formatting
-  * Enhanced content readability
-  * Better HTML structure preservation
+- Optimized performance to work within MCP timeout limits
+  * Reduced default maxDepth and maxBranching parameters
+  * Improved page loading efficiency
+  * Added timeout checks throughout the process
+  * Enhanced error handling for timeouts
 
 > This project is a fork of [mcp-webresearch](https://github.com/mzxrai/mcp-webresearch) by [mzxrai](https://github.com/mzxrai), enhanced with additional features for deep web research capabilities. We're grateful to the original creators for their foundational work.
 
@@ -25,7 +25,6 @@ Bring real-time info into Claude with intelligent search queuing, enhanced conte
   - Queue management with progress tracking
   - Error recovery and automatic retries
   - Search result deduplication
-  - Queue persistence between sessions
 
 - Enhanced Content Extraction
   - TF-IDF based relevance scoring
@@ -40,7 +39,6 @@ Bring real-time info into Claude with intelligent search queuing, enhanced conte
   - Google search integration
   - Webpage content extraction
   - Research session tracking
-  - Screenshot capture
   - Markdown conversion with improved formatting
 
 ## Prerequisites
@@ -73,27 +71,16 @@ Simply start a chat with Claude and send a prompt that would benefit from web re
 
 ### Tools
 
-1. `search_google`
-   - Performs Google searches and extracts results
-   - Arguments:
-     ```typescript
-     {
-       query: string;
-       maxResults?: number;    // default: 10
-       includeSnippets?: boolean;  // default: true
-     }
-     ```
-
-2. `deep_research`
+1. `deep_research`
    - Performs comprehensive research with content analysis
    - Arguments:
      ```typescript
      {
        topic: string;
-       maxDepth?: number;      // default: 3
-       maxBranching?: number;  // default: 5
-       timeout?: number;       // default: 300000 (5 minutes)
-       minRelevanceScore?: number;  // default: 0.5
+       maxDepth?: number;      // default: 2
+       maxBranching?: number;  // default: 3
+       timeout?: number;       // default: 55000 (55 seconds)
+       minRelevanceScore?: number;  // default: 0.7
      }
      ```
    - Returns:
@@ -109,28 +96,25 @@ Simply start a chat with Claude and send a prompt that would benefit from web re
          totalSteps: number;
          processedUrls: number;
        };
+       timing: {
+         started: string;
+         completed?: string;
+         duration?: number;
+         operations?: {
+           parallelSearch?: number;
+           deduplication?: number;
+           topResultsProcessing?: number;
+           remainingResultsProcessing?: number;
+           total?: number;
+         };
+       };
      }
      ```
 
 2. `parallel_search`
    - Performs multiple Google searches in parallel with intelligent queuing
    - Arguments: `{ queries: string[], maxParallel?: number }`
-
-3. `visit_page`
-   - Visits a webpage and extracts its content with enhanced relevance scoring
-   - Arguments: `{ url: string, takeScreenshot?: boolean }`
-
-4. `take_screenshot`
-   - Takes a screenshot of the current page
-   - No arguments required
-
-5. `get_queue_status`
-   - Check the status of pending searches
-   - No arguments required
-
-6. `cancel_search`
-   - Cancel pending searches in the queue
-   - Arguments: `{ searchId?: string }` (omit searchId to cancel all)
+   - Note: maxParallel is limited to 5 to ensure reliable performance
 
 ### Prompts
 
@@ -142,40 +126,14 @@ A guided research prompt that helps Claude conduct thorough web research. The pr
 - Keep you informed and let you guide the research interactively
 - Always cite sources with URLs
 
-### Resources
-
-We expose two things as MCP resources: (1) captured webpage screenshots, and (2) the research session.
-
-#### Screenshots
-
-When you take a screenshot, it's saved as an MCP resource. You can access captured screenshots in Claude Desktop via the Paperclip icon.
-
-#### Research Session
-
-The server maintains a research session that includes:
-- Search queries and their results
-- Queue status and history
-- Visited pages with relevance scores
-- Extracted content with structure analysis
-- Screenshots
-- Timestamps
-
-### Suggestions
-
-For the best results, if you choose not to use the `agentic-research` prompt when doing your research, it may be helpful to:
-1. Use batch searches for broader topic coverage
-2. Leverage the queue system for extensive research
-3. Monitor search progress with queue status
-4. Suggest high-quality sources for Claude to use
-
 ## Configuration Options
 
 The server can be configured through environment variables:
 
-- `MAX_PARALLEL_SEARCHES`: Maximum number of concurrent searches (default: 10)
+- `MAX_PARALLEL_SEARCHES`: Maximum number of concurrent searches (default: 5)
 - `SEARCH_DELAY_MS`: Delay between searches in milliseconds (default: 200)
 - `MAX_RETRIES`: Number of retry attempts for failed requests (default: 3)
-- `TIMEOUT_MS`: Request timeout in milliseconds (default: 30000)
+- `TIMEOUT_MS`: Request timeout in milliseconds (default: 55000)
 - `LOG_LEVEL`: Logging level (default: 'info')
 
 ## Error Handling
@@ -188,7 +146,7 @@ The server can be configured through environment variables:
 
 2. Network Timeouts
    - Symptom: "Request timed out" error
-   - Solution: Increase `TIMEOUT_MS` or check network connection
+   - Solution: Ensure requests complete within the 60-second MCP timeout
 
 3. Browser Issues
    - Symptom: "Browser failed to launch" error

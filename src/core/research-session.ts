@@ -25,6 +25,14 @@ export class ResearchSession implements IResearchSession {
     private options: Required<SessionOptions>;
     private browser: Browser | null = null;
     private context: BrowserContext | null = null;
+    private startTime: number;
+
+    private checkTimeout(): void {
+        const elapsed = Date.now() - this.startTime;
+        if (elapsed >= this.options.timeout) {
+            throw new Error('Research session timeout');
+        }
+    }
 
     constructor(topic: string, options: SessionOptions = {}) {
         this.id = `research_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
@@ -33,13 +41,14 @@ export class ResearchSession implements IResearchSession {
         this.visitedUrls = new Set<string>();
         this.contentExtractor = new ContentExtractor();
         this.contentAnalyzer = new ContentAnalyzer();
+        this.startTime = Date.now();
 
         this.options = {
             maxSteps: options.maxSteps || 10,
-            maxDepth: options.maxDepth || 3,
-            maxBranching: options.maxBranching || 5,
-            timeout: options.timeout || 300000, // 5 minutes
-            minRelevanceScore: options.minRelevanceScore || 0.5,
+            maxDepth: options.maxDepth || 2,
+            maxBranching: options.maxBranching || 3,
+            timeout: options.timeout || 55000, // Set below MCP timeout
+            minRelevanceScore: options.minRelevanceScore || 0.7,
             maxParallelOperations: options.maxParallelOperations || 3
         };
 
@@ -85,6 +94,8 @@ export class ResearchSession implements IResearchSession {
     }
 
     private async fetchContent(url: string): Promise<string> {
+        this.checkTimeout();
+
         if (!this.isProcessableUrl(url)) {
             throw new Error(`Cannot process URL: ${url}`);
         }
@@ -94,63 +105,13 @@ export class ResearchSession implements IResearchSession {
 
         const page = await this.context.newPage();
         try {
-            // Add random delay between requests (1-3 seconds)
-            await new Promise(resolve => setTimeout(resolve, 1000 + Math.random() * 2000));
-
-            // Navigate to the URL with a timeout
+            // Navigate to the URL with a reduced timeout
             await page.goto(url, {
-                waitUntil: 'networkidle',
-                timeout: 30000
+                waitUntil: 'domcontentloaded',
+                timeout: 10000 // 10 seconds max for page load
             });
 
-            // Wait for content to load
-            await page.waitForLoadState('domcontentloaded');
-
-            // Wait for dynamic content
-            await page.waitForTimeout(2000); // Allow time for dynamic content to load
-
-            // Wait for specific technical content selectors
-            const technicalSelectors = [
-                'pre', 'code',
-                '.technical-content',
-                '.documentation',
-                '.markdown-body',
-                '.post-content',
-                'article'
-            ];
-
-            for (const selector of technicalSelectors) {
-                try {
-                    await page.waitForSelector(selector, { timeout: 5000 });
-                } catch (e) {
-                    // Ignore if selector not found
-                }
-            }
-
-            // Expand any "show more" or similar buttons
-            const expandButtons = [
-                'button:has-text("show more")',
-                'button:has-text("read more")',
-                'button:has-text("expand")',
-                '.expand-button',
-                '.show-more'
-            ];
-
-            for (const buttonSelector of expandButtons) {
-                try {
-                    const buttons = await page.$$(buttonSelector);
-                    for (const button of buttons) {
-                        await button.click().catch(() => {}); // Ignore click errors
-                    }
-                } catch (e) {
-                    // Ignore if no buttons found
-                }
-            }
-
-            // Wait a bit for any expanded content
-            await page.waitForTimeout(1000);
-
-            // Get the full HTML content
+            // Get the HTML content immediately without waiting for additional content
             const html = await page.content();
             return html;
         } catch (error) {

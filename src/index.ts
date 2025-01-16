@@ -64,18 +64,19 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
                         type: 'number',
                         description: 'Maximum depth of related content exploration',
                         minimum: 1,
-                        maximum: 5
+                        maximum: 2 // Reduced from 5 to work within timeout
                     },
                     maxBranching: {
                         type: 'number',
                         description: 'Maximum number of related paths to explore',
                         minimum: 1,
-                        maximum: 10
+                        maximum: 3 // Reduced from 10 to work within timeout
                     },
                     timeout: {
                         type: 'number',
                         description: 'Research timeout in milliseconds',
-                        minimum: 30000
+                        minimum: 30000,
+                        maximum: 55000 // Set below MCP timeout
                     },
                     minRelevanceScore: {
                         type: 'number',
@@ -104,7 +105,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
                         type: 'number',
                         description: 'Maximum number of parallel searches',
                         minimum: 1,
-                        maximum: 10
+                        maximum: 5 // Reduced from 10 to work within timeout
                     }
                 },
                 required: ['queries']
@@ -125,10 +126,10 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 
                 console.log(`Starting deep research on topic: ${args.topic}`);
                 const result = await deepResearch.startResearch(args.topic, {
-                    maxDepth: args.maxDepth,
-                    maxBranching: args.maxBranching,
-                    timeout: args.timeout,
-                    minRelevanceScore: args.minRelevanceScore
+                    maxDepth: Math.min(args.maxDepth || 2, 2),
+                    maxBranching: Math.min(args.maxBranching || 3, 3),
+                    timeout: Math.min(args.timeout || 55000, 55000),
+                    minRelevanceScore: args.minRelevanceScore || 0.7
                 });
 
                 return {
@@ -147,8 +148,10 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
                     throw new McpError(ErrorCode.InvalidParams, 'Queries array is required');
                 }
 
-                console.log(`Starting parallel search with ${args.queries.length} queries`);
-                const result = await deepResearch.parallelSearch.parallelSearch(args.queries);
+                // Limit the number of parallel queries
+                const limitedQueries = args.queries.slice(0, 5);
+                console.log(`Starting parallel search with ${limitedQueries.length} queries`);
+                const result = await deepResearch.parallelSearch.parallelSearch(limitedQueries);
 
                 return {
                     content: [

@@ -1,6 +1,6 @@
 {
   "name": "mcp-webresearch",
-  "version": "0.2.7",
+  "version": "0.2.8",
   "description": "MCP Web Research Server with Deep Research capabilities",
   "main": "dist/index.js",
   "type": "module",
