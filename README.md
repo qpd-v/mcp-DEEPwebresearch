@@ -1,4 +1,4 @@
-# MCP Deep Web Research Server (v0.2.8)
+# MCP Deep Web Research Server (v0.2.9)
 
 [![Node.js Version](https://img.shields.io/badge/node-%3E%3D18-brightgreen.svg)](https://nodejs.org/)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.0-blue.svg)](https://www.typescriptlang.org/)
@@ -8,6 +8,7 @@ A Model Context Protocol (MCP) server for advanced web research.
 
 ## Latest Changes
 
+- Added visit_page tool for direct webpage content extraction
 - Optimized performance to work within MCP timeout limits
   * Reduced default maxDepth and maxBranching parameters
   * Improved page loading efficiency
@@ -115,6 +116,18 @@ Simply start a chat with Claude and send a prompt that would benefit from web re
    - Performs multiple Google searches in parallel with intelligent queuing
    - Arguments: `{ queries: string[], maxParallel?: number }`
    - Note: maxParallel is limited to 5 to ensure reliable performance
+
+3. `visit_page`
+   - Visit a webpage and extract its content
+   - Arguments: `{ url: string }`
+   - Returns:
+     ```typescript
+     {
+       url: string;
+       title: string;
+       content: string;  // Markdown formatted content
+     }
+     ```
 
 ### Prompts
 
