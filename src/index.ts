@@ -71,8 +71,8 @@ let page: Page | undefined;
 
 const server = new Server(
     {
-        name: 'mcp-webresearch',
-        version: '1.0.0'
+        name: 'mcp-deepwebresearch',
+        version: '0.3.0'
     },
     {
         capabilities: {

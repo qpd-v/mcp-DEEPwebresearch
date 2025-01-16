@@ -1,4 +1,4 @@
-# MCP Deep Web Research Server (v0.2.9)
+# MCP Deep Web Research Server (v0.3.0)
 
 [![Node.js Version](https://img.shields.io/badge/node-%3E%3D18-brightgreen.svg)](https://nodejs.org/)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.0-blue.svg)](https://www.typescriptlang.org/)
@@ -49,22 +49,70 @@ Bring real-time info into Claude with intelligent search queuing, enhanced conte
 
 ## Installation
 
-First, ensure you've downloaded and installed the [Claude Desktop app](https://claude.ai/download) and you have npm installed.
+### Global Installation (Recommended)
 
-Next, add this entry to your `claude_desktop_config.json` (on Mac, found at `~/Library/Application\ Support/Claude/claude_desktop_config.json`):
+```bash
+# Install globally using npm
+npm install -g mcp-deepwebresearch
 
+# Or using yarn
+yarn global add mcp-deepwebresearch
+
+# Or using pnpm
+pnpm add -g mcp-deepwebresearch
+```
+
+### Local Project Installation
+
+```bash
+# Using npm
+npm install mcp-deepwebresearch
+
+# Using yarn
+yarn add mcp-deepwebresearch
+
+# Using pnpm
+pnpm add mcp-deepwebresearch
+```
+
+### Claude Desktop Integration
+
+After installing the package, add this entry to your `claude_desktop_config.json`:
+
+#### Windows
 ```json
 {
   "mcpServers": {
     "deepwebresearch": {
-      "command": "npx",
-      "args": ["-y", "@qpd-v/mcp-DEEPwebresearch@latest"]
+      "command": "mcp-deepwebresearch",
+      "args": []
     }
   }
 }
 ```
+Location: `%APPDATA%\Claude\claude_desktop_config.json`
+
+#### macOS
+```json
+{
+  "mcpServers": {
+    "deepwebresearch": {
+      "command": "mcp-deepwebresearch",
+      "args": []
+    }
+  }
+}
+```
+Location: `~/Library/Application Support/Claude/claude_desktop_config.json`
 
 This config allows Claude Desktop to automatically start the web research MCP server when needed.
+
+### First-time Setup
+
+After installation, run this command to install required browser dependencies:
+```bash
+npx playwright install chromium
+```
 
 ## Usage
 
