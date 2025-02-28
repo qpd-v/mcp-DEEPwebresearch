@@ -6,6 +6,8 @@
 
 A Model Context Protocol (MCP) server for advanced web research.
 
+<a href="https://glama.ai/mcp/servers/5afpizjl6x"><img width="380" height="200" src="https://glama.ai/mcp/servers/5afpizjl6x/badge" alt="Web Research Server MCP server" /></a>
+
 ## Latest Changes
 
 - Added visit_page tool for direct webpage content extraction
